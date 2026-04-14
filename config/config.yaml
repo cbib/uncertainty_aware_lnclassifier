@@ -1,0 +1,71 @@
+to_train:
+  # Experiment IDs to run training
+  - gencode.v47.common.cdhit.cv
+
+training:
+  # Deprecated config object. Should move split info experiment config
+  gencode.v47.common.cdhit.cv:
+    redundancy_reduction: cdhit  # Options: cdhit, 1tpg (one transcript per gene), none
+    balanced: true
+    train_split: 80
+    mRNN_validation_split: 20
+    lncrnabert_validation_split: 20
+    train_pc: results/gencode.v47.common.cdhit/training/gencode.v47.train_pc.fa
+    train_lnc: results/gencode.v47.common.cdhit/training/gencode.v47.train_lnc.fa
+
+databases:
+  gencode.v47:
+    version: 47
+    assembly: GRCh38
+    fasta: "resources/gencode.v47.transcripts.fa"
+    pc_fasta: "resources/gencode.v47.pc_transcripts.fa"
+    lnc_fasta: "resources/gencode.v47.lncRNA_transcripts.fa"
+    cds: "resources/Homo_sapiens.GRCh38.cds.all.fa.gz"
+
+  gencode.v49:
+    version: 49
+    assembly: GRCh38
+    fasta: "resources/gencode.v49.transcripts.fa"
+    pc_fasta: "resources/gencode.v49.pc_transcripts.fa"
+    lnc_fasta: "resources/gencode.v49.lncRNA_transcripts.fa"
+    cds: "resources/Homo_sapiens.GRCh38.cds.all.fa.gz"
+
+  gencode.v46:
+    version: 46
+    assembly: GRCh38
+    fasta: "resources/gencode.v46.transcripts.fa"
+    pc_fasta: "resources/gencode.v46.pc_transcripts.fa"
+    lnc_fasta: "resources/gencode.v46.lncRNA_transcripts.fa"
+    cds: "resources/Homo_sapiens.GRCh38.cds.all.fa.gz"
+
+experiments:
+  gencode.v47.common.cdhit.cv:
+    # TODO: Refactor configuration so experiments can import values from reference DBs
+    reference: gencode.v47
+    fasta: "resources/gencode.v47.transcripts.fa"
+    pc_fasta: "resources/gencode.v47.pc_transcripts.fa"
+    lnc_fasta: "resources/gencode.v47.lncRNA_transcripts.fa"
+    reference_cds: "resources/Homo_sapiens.GRCh38.cds.all.fa.gz"
+    preprocessing:
+      common_with: gencode.v46
+      redundancy: cdhit
+    n_folds: 5
+    models:
+      cpat: custom
+      rnasamba: custom
+      lncfinder: custom
+      lncrnabert: custom
+      plncpro: custom
+    tools:
+      - feelnc
+      - cpat_p
+      - cpat_l
+      - cpat_cutoff  # Calculate best cutoff for our data
+      - mrnn
+      - lncrnabert
+      - rnasamba_full
+      - plncpro
+      - lncfinder_ss
+      - lncfinder_no_ss
+      - lncDC_no_ss
+      - lncDC_ss

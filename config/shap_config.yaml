@@ -1,0 +1,142 @@
+# SHAP RF cross-fold pipeline configuration
+# Loaded by workflow/rules/shap.smk via its own configfile directive.
+
+# Experiments used by SHAP convenience targets (shap_testing/shap_full_all/shap_clustered_all).
+shap_run_experiments:
+  - gencode.v47.common.cdhit.cv
+
+# Experiments used by RFECV convenience targets. Keep empty unless RFECV modes
+# are explicitly added to the corresponding experiment blocks under `shap:`.
+shap_rfecv_experiments: []
+
+shap:
+  gencode.v47.common.cdhit.cv.old:
+    n_folds: 5
+    background_sample: 500         # SHAP background rows (higher = more accurate, slower)
+    top_n_features: 20             # features shown in importance / heatmap plots
+    random_state: 42
+    force_rerun: false             # set true to ignore cached rf_model.joblib / shap_values.csv
+
+    # Supplementary feature files (relative to paper/ working directory)
+    te_features:  "te_pipeline/results/te_analysis_flexible/features/all_transcripts_te_features.corrected.csv"
+    nbd_features: "nonb-pipeline/results/gencode.v47/extended_analysis/features_nonb_features.csv"
+
+    # Correlation-filtering artefact (used by 'filtered' feature mode)
+    cluster_file:      "results/gencode.v47.common.cdhit.cv/features/clustering/feature_clusters_at_distances.csv"
+    cluster_threshold: ~  # null → use optimal_threshold.txt from feature_clustering rule
+
+    # Cherry-picked transcripts for waterfall / beeswarm plots
+    cherry_picks_file: "config/shap_cherry_picks.json"
+
+    # ── Feature-set modes ──────────────────────────────────────────────────
+    # Each mode gets its own output directory:  results/{expt}/shap_{mode}/
+    modes:
+      full:
+        feature_mode: full            # all features, no correlation filtering
+        max_transcripts_per_fold: ~   # null = evaluate every test transcript
+
+      "clustered":
+        feature_mode: filtered        # keep one feature per correlation cluster
+        max_transcripts_per_fold: ~
+
+      testing:
+        feature_mode: filtered        # same as clustered but limited to 100 transcripts
+        max_transcripts_per_fold: 100 # fast smoke-test
+
+
+  gencode.v47.common.cdhit.cv:
+    n_folds: 5
+    background_sample: 500         # SHAP background rows (higher = more accurate, slower)
+    top_n_features: 20             # features shown in importance / heatmap plots
+    random_state: 42
+    force_rerun: true             # set true to ignore cached rf_model.joblib / shap_values.csv
+
+    # Supplementary feature files (relative to paper/ working directory)
+    te_features:  "te_pipeline/results/te_analysis_flexible/features/all_transcripts_te_features.corrected.csv"
+    nbd_features:  "nonb-pipeline/results/gencode.v47.transcripts/extended_analysis/features_nonb_features.csv"
+
+    # Correlation-filtering artefact (used by 'filtered' feature mode)
+    cluster_file:      "results/gencode.v47.common.cdhit.cv/features/clustering/feature_clusters_at_distances.csv"
+    cluster_threshold: ~  # null -> use optimal_threshold.txt from feature_clustering rule
+
+    # Cherry-picked transcripts for waterfall / beeswarm plots
+    cherry_picks_file: "config/shap_cherry_picks.json"
+
+    # -- Feature-set modes -------------------------------------------------
+    modes:
+      full:
+        feature_mode: full
+        max_transcripts_per_fold: ~
+
+      "clustered":
+        feature_mode: filtered
+        max_transcripts_per_fold: ~
+
+      testing:
+        feature_mode: filtered
+        max_transcripts_per_fold: 100
+
+
+  gencode.v47.common.cdhit.cv_no_nbd:
+    n_folds: 5
+    background_sample: 500         # SHAP background rows (higher = more accurate, slower)
+    top_n_features: 20             # features shown in importance / heatmap plots
+    random_state: 42
+    force_rerun: false             # set true to ignore cached rf_model.joblib / shap_values.csv
+
+    # Supplementary feature files (relative to paper/ working directory)
+    te_features:  "te_pipeline/results/te_analysis_flexible/features/all_transcripts_te_features.corrected.csv"
+    nbd_features: null             # excluded for no-NBD analysis
+
+    # Correlation-filtering artefact (used by 'filtered' feature mode)
+    cluster_file:      "results/gencode.v47.common.cdhit.cv_no_nbd/features/clustering/feature_clusters_at_distances.csv"
+    cluster_threshold: ~  # null -> use optimal_threshold.txt from feature_clustering rule
+
+    # Cherry-picked transcripts for waterfall / beeswarm plots
+    cherry_picks_file: "config/shap_cherry_picks.json"
+
+    # -- Feature-set modes -------------------------------------------------
+    modes:
+      full:
+        feature_mode: full
+        max_transcripts_per_fold: ~
+
+      "clustered":
+        feature_mode: filtered
+        max_transcripts_per_fold: ~
+
+      testing:
+        feature_mode: filtered
+        max_transcripts_per_fold: 100
+
+
+# Shared template for non-default/advanced SHAP modes and RFECV settings.
+# This block is NOT used automatically by rules; copy values into an experiment
+# under `shap:` and add that experiment to the corresponding run list above.
+template_experiment:
+  modes:
+    rfecv_test:
+      feature_mode: filtered
+      max_transcripts_per_fold: 1000
+      use_rfecv_consensus: true
+
+    rfecv_full:
+      feature_mode: filtered
+      max_transcripts_per_fold: ~
+      use_rfecv_consensus: true
+
+  rfecv_select:
+    feature_mode:        filtered  # 'full' = all features; 'filtered' = correlation pre-filter
+    consensus_min_folds: 3         # feature must be selected in >= this many folds
+    # Set per-experiment when copied:
+    # cluster_file: "results/<expt>/features/clustering/feature_clusters_at_distances.csv"
+    max_transcripts:   ~           # null = all training transcripts per fold
+    cv_folds:          5
+    cv_repeats:        1           # total CV fits = cv_folds x cv_repeats
+    scoring:           "balanced_accuracy"
+    rfe_step:          5
+    perm_n_repeats:    5
+    n_trees:           100
+    top_n_plot:        30
+    use_1se_rule:      true
+    force_rerun:       false

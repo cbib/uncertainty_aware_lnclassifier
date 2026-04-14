@@ -1,0 +1,16 @@
+name: cpat_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.12  # I could use python=3.13
+  - cpat
+  - numpy
+  - pysam=0.23.3  # Rahma used 0.23.0 with python=3.12
+  - r-base
+  - r-rocr
+  - r-logistf
+  - pip
+pip:
+  - CPAT

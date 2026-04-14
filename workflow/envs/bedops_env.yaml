@@ -1,0 +1,7 @@
+name: bedops_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - bedops

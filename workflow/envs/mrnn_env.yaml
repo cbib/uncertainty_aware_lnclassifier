@@ -1,0 +1,14 @@
+name: mrnn_env
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  # We could install numpy and theano from conda-forge
+  - python=2.7.*
+  - mkl-service
+  - mako=1.1.6
+  - numpy
+  - cudatoolkit
+  - cudnn
+  - theano
+  - indico::passage

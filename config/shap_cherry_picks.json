@@ -1,0 +1,27 @@
+{
+  "_comment": "Cherry-picked transcript groups for SHAP waterfall/beeswarm analysis.",
+  "_comment2": "Version suffixes (.1, .2 …) are stripped automatically.",
+
+  "low_confidence_PC": [
+    "ENST00000265171",
+    "ENST00000522362",
+    "ENST00000293599",
+    "ENST00000704677",
+    "ENST00000342193"
+  ],
+  "low_confidence_lnc": [
+    "ENST00000434839",
+    "ENST00000710870"
+  ],
+  "high_confidence_PC": [
+    "ENST00000361567",
+    "ENST00000503087",
+    "ENST00000608796",
+    "ENST00000581411",
+    "ENST00000651610"
+  ],
+  "high_confidence_lnc": [
+    "ENST00000524131",
+    "ENST00000554894"
+  ]
+}

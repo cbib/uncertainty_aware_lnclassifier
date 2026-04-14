@@ -1,0 +1,435 @@
+# pipeline_manifest.yaml
+#
+# Reusable manifest of the LNClassifier Snakemake pipeline.
+# Captures rule-file dependencies, entry points, rules, output patterns,
+# known bugs, and wildcard definitions.
+#
+# Both humans and machines can consume this file:
+#   import yaml; m = yaml.safe_load(open("pipeline_manifest.yaml"))
+#   m["entry_points"]        → runnable entry points
+#   m["include_graph"]       → file-level DAG (adjacency list)
+#   m["modules"]             → per-file rule catalogue
+#   m["known_bugs"]          → actionable issues before next run
+#
+# Files in workflow/scripts/ or workflow/rules/ that are NOT listed here
+# are either newly added (not yet catalogued) or obsolete (no active caller).
+
+meta:
+  project: LNClassifier
+  description: "Cross-validation benchmark of lncRNA classification tools"
+  last_updated: "2026-04-14"
+  configs:
+    cv_pipeline:        config/config.yaml
+    feature_analysis:   config/feature_analysis_config.yaml
+    shap:               config/shap_config.yaml
+    figures:            config/figures_config.yaml
+
+# ---------------------------------------------------------------------------
+# Entry points — top-level Snakefiles / rule files you can run directly
+# ---------------------------------------------------------------------------
+entry_points:
+  cv_pipeline:
+    file:        workflow/rules/cv_orchestrator.smk
+    config:      config/config.yaml
+    target_rule: all_cv
+    status:      active
+    description: "End-to-end N-fold CV benchmark (dataset prep → training → testing → tables)"
+    run_with:    "snakemake --snakefile workflow/rules/cv_orchestrator.smk --configfile config/config.yaml"
+
+  feature_analysis:
+    file:        workflow/rules/feature_analysis.smk
+    config:      config/feature_analysis_config.yaml
+    target_rule: feature_analysis_all
+    status:      active_separate
+    description: "Post-CV feature analysis: SHAP, clustering, embeddings, entropy, statistical tests, univariate"
+    run_with:    "snakemake --snakefile workflow/rules/feature_analysis.smk --configfile config/feature_analysis_config.yaml"
+
+  figures_pipeline:
+    file:        workflow/rules/figures.smk
+    config:      config/figures_config.yaml
+    target_rule: all_figures
+    status:      active_separate
+    description: "Main publication figure production from feature-analysis and CV outputs"
+    run_with:    "snakemake --snakefile workflow/rules/figures.smk --configfile config/figures_config.yaml"
+
+  root_snakefile:
+    file:        Snakefile
+    config:      config/config.yaml
+    target_rule: all
+    status:      active
+    description: "Root entry point — delegates to cv_orchestrator.smk via single include + rule all"
+
+# ---------------------------------------------------------------------------
+# Include graph — adjacency list of file-level include dependencies
+# Keys are the files that contain include statements.
+# ---------------------------------------------------------------------------
+include_graph:
+  "workflow/rules/cv_orchestrator.smk":
+    - workflow/rules/train.smk
+    - workflow/rules/lncfinder.smk
+    - workflow/rules/feelnc.smk
+    - workflow/rules/cpat.smk
+    - workflow/rules/mrnn_cv.smk
+    - workflow/rules/plncpro.smk
+    - workflow/rules/process.smk
+    - workflow/rules/lncDC.smk
+  "workflow/rules/train.smk":
+    - workflow/rules/rnasamba.smk
+    - workflow/rules/mrnn_train.smk
+    - workflow/rules/lncrnabert.smk
+  "workflow/rules/feature_analysis.smk":
+    - workflow/rules/statistical_analysis.smk
+    - workflow/rules/embeddings.smk
+    - workflow/rules/shap.smk
+  "workflow/rules/statistical_analysis.smk":
+    - workflow/rules/entropy.smk
+    - workflow/rules/clustering.smk
+
+# ---------------------------------------------------------------------------
+# Modules — per-file catalogue: status, role, entry rule, and rule list
+#
+# Rule fields:
+#   name   — rule name exactly as written in the .smk file
+#   type   — one of: aggregation | data_prep | training | inference |
+#             processing | analysis | setup | orchestration | checkpoint
+#   output — representative primary output pattern (wildcards use {name})
+# ---------------------------------------------------------------------------
+modules:
+
+  cv_orchestrator:
+    file:        workflow/rules/cv_orchestrator.smk
+    status:      active
+    role:        dataset_prep_and_cv_orchestration
+    entry_rule:  all_cv
+    rules:
+      - { name: all_cv,                     type: aggregation,   output: "results/cv_orchestrator/final_report.txt" }
+      - { name: combine_pc_and_lnc_cv,      type: data_prep,     output: "results/{expt}/datasets/{expt}.pc_and_lnc.fa" }
+      - { name: remove_redundancy_with_cdhit, type: data_prep,   output: "results/{expt}/datasets/cdhit/{expt}_cdhit90.fa" }
+      - { name: prepare_cv_splits,          type: data_prep,     output: "results/{expt}/datasets/cv_split.done" }
+      - { name: aggregate_cv_splits,        type: data_prep,     output: "results/{expt}/datasets/{fold}/test_all.fa" }
+      - { name: cv_model_training,          type: orchestration, output: "results/{expt}/training/{fold}/training.done" }
+      - { name: cv_training_orchestrator,   type: orchestration, output: "results/{expt}/training/cv_training.done" }
+
+  train:
+    file:        workflow/rules/train.smk
+    status:      active
+    role:        training_orchestrator
+    rules:
+      - { name: get_cds_from_dataset,              type: data_prep, output: "results/{expt}/datasets/{fold}/train_pc.cds.fa" }
+      - { name: cpat_make_hexamer_tab,             type: training,  output: "results/{expt}/training/{fold}/cpat/{fold}_Hexamer.tsv" }
+      - { name: cpat_train,                        type: training,  output: "results/{expt}/training/{fold}/cpat/{fold}.logit.RData" }
+      - { name: lncDC_train,                       type: training,  output: "results/{expt}/training/{fold}/lncDC/" }
+      - { name: filter_cds_with_ss,                type: data_prep, output: "results/{expt}/datasets/{fold}/train_pc.cds.fa.with_ss" }
+      - { name: lncDC_train_with_precomputed_ss,   type: training,  output: "results/{expt}/training/{fold}/lncDC_ss/" }
+      - { name: plncpro_train,                     type: training,  output: "results/{expt}/training/{fold}/plncpro/{fold}.model" }
+      - { name: lncfinder_train,                   type: training,  output: "results/{expt}/training/{fold}/lncfinder/{fold}_{ss}.RData" }
+      - { name: feelnc_train,                      type: training,  output: "results/{expt}/training/{fold}/FEELnc/{fold}.{test_info}.fa_RF.txt" }
+
+  mrnn_train:
+    file:        workflow/rules/mrnn_train.smk
+    status:      active
+    role:        mrnn_2stage_checkpoint_training
+    entry_rule:  all_mrnn
+    rules:
+      - { name: mrnn_augmented_dataset,            type: data_prep,  output: "results/{expt}/training/{fold}/mRNN/datasets/mRNN_aug{SEED}_pc.fa" }
+      - { name: mrnn_pretrain,                     type: checkpoint, output: "results/{expt}/training/{fold}/mRNN/pretrained/{SEED}.done.training" }
+      - { name: mrnn_test_accuracy,                type: training,   output: "results/{expt}/training/{fold}/mRNN/{stage}/accuracy_tests/mRNN.model.{model_info}_acc.txt" }
+      - { name: mrnn_aggregate_accuracies_per_seed, type: training,  output: "results/{expt}/training/{fold}/mRNN/pretrained/accuracy_tests/{SEED}.done" }
+      - { name: mrnn_get_best_pretrained_models,   type: checkpoint, output: "results/{expt}/training/{fold}/mRNN/pretrained/best_models/" }
+      - { name: mrnn_train,                        type: checkpoint, output: "results/{expt}/training/{fold}/mRNN/trained/{pre_SEED}.{pre_epoch}.{run}.done.training" }
+      - { name: mrnn_get_best_trained_models,      type: training,   output: "results/{expt}/training/{fold}/mRNN/trained/best_models/" }
+
+  mrnn_cv:
+    file:    workflow/rules/mrnn_cv.smk
+    status:  active
+    role:    mrnn_cv_inference
+    rules:
+      - { name: mRNN_cv, type: inference, output: "results/{expt}/testing/{fold}/mRNN/{fold}.mRNN.multi.tsv" }
+
+  lncrnabert:
+    file:        workflow/rules/lncrnabert.smk
+    status:      active
+    role:        lncrnabert_training_and_inference
+    entry_rule:  all_lncrnabert
+    rules:
+      - { name: lncrnabert_train,                  type: training,  output: "results/{expt}/training/{fold}/lncrnabert/{encoding}/models/" }
+      - { name: lncrnabert_train_scratch,           type: training,  output: "results/{expt}/training/{fold}/lncrnabert/{encoding}/scratch/models/" }
+      - { name: lncrnabert_test,                   type: inference, output: "results/{expt}/testing/{fold}/lncrnabert/{encoding}/classification.csv" }
+      - { name: lncrnabert_test_kmermodel,         type: inference, output: "results/{expt}/training/{fold}/lncrnabert/kmer/classification.csv" }
+      - { name: lncrnabert_test_pretrained_model,  type: inference, output: "results/{expt}/testing/{fold}/lncrnabert/pretrained/classification.csv" }
+      - { name: lncrnabert_test_finetuned,         type: inference, output: "results/{expt}/testing/{fold}/lncrnabert/finetuned/classification.csv" }
+      - { name: lncrnabert_test_published,         type: inference, output: "results/{expt}/testing/{fold}/lncrnabert/published/classification.csv" }
+
+  rnasamba:
+    file:        workflow/rules/rnasamba.smk
+    status:      active
+    role:        rnasamba_gpu_training_and_inference
+    entry_rule:  all_rnasamba
+    rules:
+      - { name: train_rnasamba_gpu, type: training,  output: "results/{expt}/training/{fold}/rnasamba/gpu/{fold}_{mode}.hdf5" }
+      - { name: rnasamba_train,     type: training,  output: "results/{expt}/training/{fold}/rnasamba/{fold}_{mode}.hdf5" }
+      - { name: rnasamba_cv,        type: inference, output: "results/{expt}/testing/{fold}/rnasamba/{fold}_{mode}.tsv" }
+      - { name: rnasamba,           type: inference, output: "results/{expt}/testing/rnasamba/{fold}_{mode}.tsv" }
+
+  lncfinder:
+    file:        workflow/rules/lncfinder.smk
+    status:      active
+    role:        lncfinder_training_and_inference
+    entry_rule:  all_lncfinder
+    rules:
+      - { name: install_lncfinder,      type: setup,     output: "software/lncfinder.installed" }
+      - { name: lncfinder_calculate_ss, type: data_prep, output: "results/{expt}/datasets/ss/lncfinder/{expt}.fa.ss" }
+      - { name: lncfinder_subset_ss,    type: data_prep, output: "results/{expt}/datasets/{fold}/{dset}.fa.ss" }
+      - { name: run_lncfinder,          type: inference, output: "results/{expt}/testing/{fold}/lncfinder/{fold}_{ss}.lncfinder" }
+
+  feelnc:
+    file:    workflow/rules/feelnc.smk
+    status:  active
+    role:    feelnc_cv_inference
+    rules:
+      - { name: feelnc_codpot_cv, type: inference, output: "results/{expt}/testing/{fold}/FEELnc/{fold}_RF.txt" }
+
+  cpat:
+    file:    workflow/rules/cpat.smk
+    status:  active
+    role:    cpat_cv_testing_and_cutoff_calibration
+    rules:
+      - { name: cpat_cv,                 type: inference, output: "results/{expt}/testing/{fold}/cpat/{fold}.cpat.{mode}.ORF_prob.best.tsv" }
+      - { name: cpat_internal_10fold_cv, type: training,  output: "results/{expt}/training/{fold}/cpat/cv/optimal_cutoff.txt" }
+
+  plncpro:
+    file:        workflow/rules/plncpro.smk
+    status:      active
+    role:        plncpro_training_and_inference
+    entry_rule:  all_plncpro
+    rules:
+      - { name: install_plncpro,   type: setup,     output: "software/plncpro.installed" }
+      - { name: blast_dbs_symlink, type: setup,     output: "resources/blast_dbs/uniprot_sprot.fasta" }
+      - { name: diamond_makedb,    type: setup,     output: "resources/blast_dbs/uniprot_sprot.dmnd" }
+      - { name: diamond_blastx,    type: data_prep, output: "results/{expt}/testing/{fold}/plncpro/test_all.fa_blastres" }
+      - { name: plncpro_build,     type: training,  output: "software/PLncPRO/plncpro_data/hg24/train/model/plncpro_model.rds" }
+      - { name: plncpro_predict,   type: inference, output: "results/{expt}/testing/{fold}/plncpro/{fold}.plncpro" }
+
+  lncDC:
+    file:    workflow/rules/lncDC.smk
+    status:  active
+    role:    lncdc_cv_inference
+    rules:
+      - { name: lncDC_cv, type: inference, output: "results/{expt}/testing/{fold}/lncDC/{fold}.lncDC.{mode}.csv" }
+
+  process:
+    file:    workflow/rules/process.smk
+    status:  active
+    role:    per_fold_output_merging_and_aggregation
+    rules:
+      - { name: merge_plncpro_feature_table, type: processing,  output: "results/{expt}/testing/{fold}/plncpro/{fold}.with_feats.plncpro" }
+      - { name: process,                     type: processing,  output: "results/{expt}/testing/{fold}/tables/{fold}_full_table.tsv" }
+      - { name: process_all_folds,           type: aggregation, output: "results/{expt}/testing/processing.done" }
+      - { name: merge_all_fold_tables,       type: aggregation, output: "results/{expt}/tables/{expt}_full_table.tsv" }
+      - { name: merge_fold_stats,            type: aggregation, output: "results/{expt}/tables/{expt}_fold_stats.tsv",
+          note: "Backwards-compatibility alias for merge_all_fold_tables" }
+
+  feature_analysis:
+    file:        workflow/rules/feature_analysis.smk
+    status:      active_separate
+    role:        feature_analysis_orchestrator
+    entry_rule:  feature_analysis_all
+    # Rules are defined in the included sub-files below; this file only aggregates them.
+
+  shap:
+    file:    workflow/rules/shap.smk
+    status:  active_separate
+    role:    shap_per_fold_rf_training_and_aggregation
+    rules:
+      - { name: shap_fold,          type: analysis,    output: "results/{expt}/features/shap_{mode}/fold{fold}/shap_values.csv" }
+      - { name: shap_aggregate,     type: aggregation, output: "results/{expt}/features/shap_{mode}/shap_aggregated.csv" }
+      - { name: shap_testing,       type: aggregation, output: null, note: "100 transcripts/fold smoke-test" }
+      - { name: shap_full_all,      type: aggregation, output: null }
+      - { name: shap_clustered_all, type: aggregation, output: null }
+      - { name: shap_all,           type: aggregation, output: null }
+
+  rfecv:
+    file:    workflow/rules/rfecv.smk
+    status:  active_separate
+    role:    rfecv_feature_selection_then_shap
+    note:    "Included after shap.smk; shares _shap_cfg/_n_folds helpers. Experiments controlled by shap_rfecv_experiments config key."
+    rules:
+      - { name: rfecv_select,     type: analysis,    output: "results/{expt}/features/rfecv/fold{fold}/rfecv_feature_selection.csv" }
+      - { name: rfecv_consensus,  type: analysis,    output: "results/{expt}/features/rfecv/consensus_features.json" }
+      - { name: rfecv_testing,    type: aggregation, output: null }
+      - { name: rfecv_all,        type: aggregation, output: null }
+      - { name: rfecv_shap_test,  type: aggregation, output: null }
+      - { name: rfecv_shap_all,   type: aggregation, output: null }
+
+  clustering:
+    file:    workflow/rules/clustering.smk
+    status:  active_separate
+    role:    spearman_ward_hierarchical_clustering
+    rules:
+      - { name: feature_clustering, type: analysis,    output: "results/{expt}/features/clustering/feature_correlation_matrix.csv" }
+      - { name: clustering_all,     type: aggregation, output: null }
+
+  embeddings:
+    file:    workflow/rules/embeddings.smk
+    status:  active_separate
+    role:    umap_tsne_pca_visualization
+    rules:
+      - { name: compute_embeddings, type: analysis,    output: "results/{expt}/features/embeddings/embeddings_complete.flag" }
+      - { name: embeddings_all,     type: aggregation, output: null }
+
+  entropy:
+    file:    workflow/rules/entropy.smk
+    status:  active_separate
+    role:    prediction_uncertainty_metrics
+    rules:
+      - { name: compute_entropy_metrics, type: analysis,    output: "results/{expt}/features/entropy/{expt}_uncertainty_analysis.tsv" }
+      - { name: compute_entropy_groups,  type: analysis,    output: "results/{expt}/features/entropy/{expt}_entropy_groups.tsv" }
+      - { name: entropy_all,             type: aggregation, output: null }
+
+  statistical_analysis:
+    file:    workflow/rules/statistical_analysis.smk
+    status:  active_separate
+    role:    mann_whitney_chi_squared_fdr_tests
+    note:    "Includes entropy.smk and clustering.smk. Produces 9 pairwise test CSVs (3 comparisons × MWU/chi2/cat_freq) + flag."
+    rules:
+      - { name: statistical_tests,     type: analysis,    output: "results/{expt}/features/statistical_analysis/statistical_tests.flag" }
+      - { name: statistical_tests_all, type: aggregation, output: null }
+
+  univariate:
+    file:    workflow/rules/univariate.smk
+    status:  deprecated
+    role:    univariate_per_group_analysis
+    note: >
+      Superseded by statistical_analysis.smk.  The figure notebooks
+      (020_feature_stat_tests_*.fix.ipynb) perform Mann-Whitney+VDA,
+      Chi-squared+Cramér's V+Odds Ratio — matching statistical_tests.py.
+      The perform_f_tests / perform_mutual_info_tests functions imported
+      in the notebooks are unused; this module is no longer included in
+      feature_analysis.smk.
+    rules:
+      - { name: univariate_analysis, type: analysis,    output: "results/{expt}/features/univariate/{grouping}/univariate_complete.flag" }
+      - { name: univariate_all,      type: aggregation, output: null }
+
+  figures:
+    file:    workflow/rules/figures.smk
+    status:  active_separate
+    role:    publication_figure_production
+    note: >
+      This is downstream of merged CV tables plus feature-analysis artefacts.
+      It is not included by feature_analysis.smk; run it explicitly after the
+      upstream artefacts exist.
+    rules:
+      - { name: performance_figures,  type: analysis,    output: "results/{dataset}/figures/performance/performance_CV.pdf" }
+      - { name: entropy_main_figures, type: analysis,    output: "results/{dataset}/figures/entropy/entropy_bald_scatter.pdf" }
+      - { name: upset_figure,         type: analysis,    output: "results/{dataset}/figures/upset/main_upset.pdf" }
+      - { name: tsne_figure,          type: analysis,    output: "results/{dataset}/figures/embeddings/tsne_three_panels.pdf" }
+      - { name: shap_figures,         type: analysis,    output: "results/{dataset}/figures/shap_{mode}/shap_importance_mean_std.pdf" }
+      - { name: all_figures,          type: aggregation, output: null }
+      - { name: cleanup_figures,      type: setup,       output: null }
+      - { name: gencode_versions_figure, type: analysis, output: "results/figures/001_gencode_versions.png" }
+      - { name: generate_timeline,    type: analysis,    output: "results/figures/timeline.pdf" }
+
+  figures_other:
+    file:    workflow/rules/figures_other.smk
+    status:  active_separate
+    role:    entropy_stratification_analysis_figures
+    note: >
+      Produces entropy_analysis_figures via plot_entropy_analysis.py (standalone script,
+      not a notebook). Compares Strategy 1 (overall 10/90 thresholds) vs Strategy 2
+      (per-class thresholds). The figures_all aggregate target collects only this rule's
+      output (does NOT chain all_figures from figures.smk).
+    rules:
+      - { name: entropy_analysis_figures, type: analysis,    output: "results/{dataset}/features/figures/entropy_analysis_tests/s1_scatter.pdf" }
+      - { name: figures_all,              type: aggregation, output: null }
+
+
+# ---------------------------------------------------------------------------
+# Analysis Flow — active downstream path from merged CV tables to figures
+# ---------------------------------------------------------------------------
+analysis_flow:
+  raw_tables:
+    - "process.smk::merge_all_fold_tables writes results/{expt}/tables/{expt}_full_table.tsv"
+    - "process.smk::merge_all_fold_tables writes results/{expt}/tables/{expt}_binary_class_table.tsv"
+  entropy_branch:
+    - "entropy.smk::compute_entropy_metrics reads merged full_table + binary_class_table"
+    - "compute_entropy_metrics writes results/{expt}/features/entropy/{expt}_uncertainty_analysis.tsv"
+    - "entropy.smk::compute_entropy_groups reads the uncertainty_analysis TSV"
+    - "compute_entropy_groups writes results/{expt}/features/entropy/{expt}_entropy_groups.tsv"
+  statistics_branch:
+    - "clustering.smk::feature_clustering reads merged full_table (+ optional TE/NBD tables)"
+    - "feature_clustering writes feature_correlation_matrix.csv, feature_clusters_at_distances.csv, silhouette_scores.csv, optimal_threshold.txt"
+    - "statistical_analysis.smk::statistical_tests reads merged tables + uncertainty_analysis TSV + clustering outputs"
+    - "statistical_tests writes 9 pairwise CSVs: {high,low}_entropy_pc_v_lnc_{mannwhitney,chi2,cat_freq} + low_vs_high_entropy_{mannwhitney,chi2,cat_freq} + statistical_tests.flag"
+  embedding_branch:
+    - "embeddings.smk::compute_embeddings reads merged full_table + binary_class_table (+ optional TE/NBD tables)"
+    - "compute_embeddings writes cached embeddings and embeddings_complete.flag"
+  figure_branch:
+    - "figures.smk::performance_figures reads per-fold binary_class_table TSVs directly from testing/{fold}/tables"
+    - "figures.smk::entropy_main_figures reads uncertainty_analysis TSV + entropy_groups TSV + clustering CSV"
+    - "figures.smk::tsne_figure reads uncertainty_analysis TSV + embeddings_complete.flag"
+    - "figures.smk::shap_figures reads SHAP outputs from the shap pipeline"
+    - "figures.smk::all_figures aggregates the main publication outputs"
+
+# ---------------------------------------------------------------------------
+# Utility locations — canonical code locations for the active analysis flow
+# ---------------------------------------------------------------------------
+utility_locations:
+  table_loading:
+    path: workflow/utils/parsing.py
+    symbol: load_tables
+  dataset_loading:
+    path: workflow/utils/entropy.py
+    symbol: load_dataset
+  probability_extraction:
+    path: workflow/utils/features.py
+    symbol: get_probabilities
+  feature_filtering:
+    path: workflow/utils/features.py
+    symbol: filter_feature_columns
+  constant_feature_removal:
+    path: workflow/utils/features.py
+    symbol: remove_constant_features
+  correlation_clustering:
+    path: workflow/utils/feature_analysis.py
+    symbol: cluster_features
+  entropy_figure_helpers:
+    path: workflow/utils/entropy_figures.py
+    symbols:
+      - run_stat_tests
+      - plot_stat_test_figure
+      - plot_entropy_scatter
+  embedding_pipeline:
+    path: workflow/utils/embeddings.py
+    symbol: EmbeddingPipeline
+  workflow_usage_audit:
+    path: workflow/utils/check_usage.py
+    note: >
+      CLI tool reporting which scripts and rule files in workflow/scripts/ and
+      workflow/rules/ are referenced by other files. Flags: --unused-only,
+      --scripts-only, --rules-only, --git-tracked (restrict to git-tracked files
+      on the active branch), --porcelain (one path per line, for piping).
+
+
+# ---------------------------------------------------------------------------
+# Wildcards — definitions of all {wildcard} tokens used across rules
+# ---------------------------------------------------------------------------
+wildcards:
+  expt:       "Experiment/dataset identifier — top-level config key"
+  fold:       "CV fold index string, e.g. 'fold0', 'fold1', ..."
+  dset:       "Inference dataset name (non-CV inference rules)"
+  ss:         "Secondary-structure mode: 'ss' or 'no-ss'"
+  mode:       "Tool-specific mode; lncDC: 'ss'/'no_ss', CPAT: 'p'/'l', RNAsamba: varies"
+  encoding:   "lncRNA-BERT encoding type: 'kmer', 'pretrained', 'finetuned', 'published'"
+  grouping:   "Grouping strategy identifier for univariate analysis"
+  SEED:       "Random seed integer used for mRNN data augmentation"
+  stage:      "mRNN training stage label: 'pretrained' or 'trained'"
+  model_info: "mRNN model filename stem used in accuracy test outputs"
+  pre_SEED:   "mRNN pre-training seed (used in fine-tuning output paths)"
+  pre_epoch:  "mRNN pre-training epoch number"
+  run:        "mRNN fine-tuning run index"
+  test_info:  "FEELnc test-info string embedded in model output filename"
+
+# ---------------------------------------------------------------------------
+# Known bugs — issues that must be resolved before the next pipeline run
+# ---------------------------------------------------------------------------
+known_bugs:

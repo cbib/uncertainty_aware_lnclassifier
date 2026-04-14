@@ -1,0 +1,12 @@
+name: plek2_env
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python>=3.8.5
+  - regex
+  - keras=2.4.3
+  - pandas
+  - tensorflow=2.4.1
+  - biopython
+  - numpy=1.19.2

@@ -1,0 +1,113 @@
+# Feature analysis pipeline configuration
+# Loaded by workflow/rules/{embeddings,entropy,univariate}.smk via their own configfile directives.
+
+feature_analysis:
+  gencode.v47.common.cdhit.cv.old:
+
+    # Supplementary feature files (relative to paper/ working directory)
+    te_features:  "te_pipeline/results/te_analysis_flexible/features/all_transcripts_te_features.corrected.csv"
+    nbd_features: "nonb-pipeline/results/gencode.v47/extended_analysis/features_nonb_features.csv"
+
+    # Correlation-filtering artefacts (produced by the feature_clustering rule)
+    cluster_file:      "results/gencode.v47.common.cdhit.cv/features/clustering/feature_clusters_at_distances.csv"
+    cluster_threshold: ~  # null → use optimal_threshold.txt from feature_clustering rule
+
+    # ── Clustering ────────────────────────────────────────────────────────
+    clustering:
+      corr_method:          spearman  # spearman | pearson | kendall
+      distance_min:         0.05
+      distance_max:         1.50
+      distance_step:        0.05
+      # dendrogram_threshold falls back to cluster_threshold above
+
+    random_state: 42
+
+    # ── Embeddings ─────────────────────────────────────────────────────────
+    embeddings:
+      methods:
+        umap:
+          n_neighbors: [15, 30]
+          min_dist: [0.1]
+        tsne:
+          perplexity: [30]
+          n_iter: [1000]
+        pca:
+          n_components: 2
+      # Pre-processing applied before embedding; null = StandardScaler only, 'pca_N' = PCA to N components first
+      preprocess: ~
+
+
+    # ── Statistical analysis ───────────────────────────────────────────────
+    statistical_analysis:
+      # Entropy grouping strategy: class_separated (Strategy 2) or overall (Strategy 1)
+      entropy_grouping_mode: overall
+
+      # Entropy columns for grouping
+      entropy_column: H_pred           # Primary column (used for both low and high groups)
+      entropy_column_high: I_bald      # Secondary column: if set, high group requires BOTH high_entropy_column >= high_threshold AND entropy_column_high >= high_threshold_sec
+
+      # Percentile thresholds for low/high entropy groups
+      low_threshold: 10                # percentile (lower bound for low entropy group, uses entropy_column)
+      high_threshold: 90               # percentile (lower bound for primary high entropy column)
+      high_threshold_sec: 90           # percentile (lower bound for secondary high entropy column, if entropy_column_high set)
+
+      # Statistical parameters
+      fdr_method: "fdr_bh"             # FDR correction method (fdr_bh, bonferroni, holm, fdr_by)
+      fdr_alpha: 0.01                  # FDR significance threshold
+
+      # Notes:
+      # - With entropy_column_high specified, high entropy group = transcripts with BOTH high H_pred AND high I_BALD
+      # - This identifies transcripts where model is truly uncertain (high prediction entropy + high disagreement)
+      # - Set entropy_column_high to null to use single-column grouping
+
+
+  gencode.v47.common.cdhit.cv:
+
+    # Supplementary feature files (relative to paper/ working directory)
+    te_features:  "te_pipeline/results/te_analysis_flexible/features/all_transcripts_te_features.corrected.csv"
+    nbd_features: "nonb-pipeline/results/gencode.v47.transcripts/extended_analysis/features_nonb_features.csv"
+
+    # Correlation-filtering artefacts (produced by the feature_clustering rule)
+    cluster_file:      "results/gencode.v47.common.cdhit.cv/features/clustering/feature_clusters_at_distances.csv"
+    cluster_threshold: ~  # null → use optimal_threshold.txt from feature_clustering rule
+
+    # ── Clustering ────────────────────────────────────────────────────────
+    clustering:
+      corr_method:          spearman  # spearman | pearson | kendall
+      distance_min:         0.05
+      distance_max:         1.50
+      distance_step:        0.05
+      # dendrogram_threshold falls back to cluster_threshold above
+
+    random_state: 42
+
+    # ── Embeddings ─────────────────────────────────────────────────────────
+    embeddings:
+      methods:
+        umap:
+          n_neighbors: [15, 30]
+          min_dist: [0.1]
+        tsne:
+          perplexity: [30]
+          n_iter: [1000]
+        pca:
+          n_components: 2
+      preprocess: ~
+
+    # ── Statistical analysis ───────────────────────────────────────────────
+    statistical_analysis:
+      # Entropy grouping strategy: class_separated (Strategy 2) or overall (Strategy 1)
+      entropy_grouping_mode: class_separated
+
+      # Entropy columns for grouping
+      entropy_column: H_pred           # Primary column (used for both low and high groups)
+      entropy_column_high: I_bald      # Secondary column: if set, high group requires BOTH high_entropy_column >= high_threshold AND entropy_column_high >= high_threshold_sec
+
+      # Percentile thresholds for low/high entropy groups
+      low_threshold: 10                # percentile (lower bound for low entropy group, uses entropy_column)
+      high_threshold: 90               # percentile (lower bound for primary high entropy column)
+      high_threshold_sec: 90           # percentile (lower bound for secondary high entropy column, if entropy_column_high set)
+
+      # Statistical parameters
+      fdr_method: "fdr_bh"             # FDR correction method (fdr_bh, bonferroni, holm, fdr_by)
+      fdr_alpha: 0.01                  # FDR significance threshold
