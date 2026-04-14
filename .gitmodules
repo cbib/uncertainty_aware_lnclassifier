@@ -1,0 +1,6 @@
+[submodule "te_pipeline"]
+	path = te_pipeline
+	url = https://github.com/cbib/rep_extraction_pipeline
+[submodule "nonb-pipeline"]
+	path = nonb-pipeline
+	url = https://github.com/cbib/nbd_extraction_pipeline
