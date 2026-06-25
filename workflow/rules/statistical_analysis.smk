@@ -79,6 +79,8 @@ rule statistical_tests:
         fdr_alpha=lambda wc: _stat_cfg(wc).get("fdr_alpha", 0.01),
         te_arg=lambda wc: _opt_arg("--te-features", config["feature_analysis"][wc.expt].get("te_features")),
         nbd_arg=lambda wc: _opt_arg("--nbd-features", config["feature_analysis"][wc.expt].get("nbd_features")),
+        scanfold_arg=lambda wc: _opt_arg("--scanfold-features", config["feature_analysis"][wc.expt].get("scanfold_features")),
+        rg4_arg=lambda wc: _opt_arg("--rg4-features", config["feature_analysis"][wc.expt].get("rg4_features")),
         cluster_arg=lambda wc: _opt_arg("--cluster-file", config["feature_analysis"][wc.expt].get("cluster_file")),
         cluster_threshold=lambda wc, input: (
             config["feature_analysis"][wc.expt].get("cluster_threshold")
@@ -101,6 +103,8 @@ rule statistical_tests:
             --groups-tsv          {input.groups_tsv} \
             {params.te_arg} \
             {params.nbd_arg} \
+            {params.scanfold_arg} \
+            {params.rg4_arg} \
             {params.cluster_arg} \
             --cluster-threshold   {params.cluster_threshold} \
             --fdr-method          {params.fdr_method} \

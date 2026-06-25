@@ -294,8 +294,8 @@ def main():
     # ── 4. Separate continuous vs categorical ─────────────────────────────────
     print("\n── Separating continuous / categorical ──")
     cat_cols, cont_cols = get_categorical_and_continuous_columns(full)
-    _continuous_df = full[cont_cols]
-    _categorical_df = full[cat_cols]
+    continuous_df = full[cont_cols]
+    categorical_df = full[cat_cols]
 
     # ── 5. Correlation matrix ─────────────────────────────────────────────────
     print(
