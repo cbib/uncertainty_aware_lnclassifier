@@ -48,8 +48,8 @@ FEATURE_LABEL_DICT: dict[str, str] = {
     "ORF_T0_MW_lncDC": "ORF Mol. Weight (type 0)",
     "ORF_T1_MW_lncDC": "ORF Mol. Weight (type 1)",
     "ORF_T2_MW_lncDC": "ORF Mol. Weight (type 2)",
-    "ORF.Max.Len_lncfinder": "Max. ORF length",
-    "ORF.Max.Cov_lncfinder": "Max. ORF coverage",
+    "ORF.Max.Len_lncfinder": "Max ORF length",
+    "ORF.Max.Cov_lncfinder": "Max ORF coverage",
     # ── Sequence composition ──────────────────────────────────────────────────
     "RCB_T0_lncDC": "ORF relative codon bias (type 0)",
     "RCB_T1_lncDC": "ORF relative codon bias (type 1)",
