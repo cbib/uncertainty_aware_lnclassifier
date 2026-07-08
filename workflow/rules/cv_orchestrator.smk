@@ -30,7 +30,7 @@ rule all_cv:
     input:
         expand(
             "results/{expt}/training/cv_training.done",
-            expt=config["experiments"].keys()
+            expt=config["to_train"]
         )
 
 
