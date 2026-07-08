@@ -379,6 +379,10 @@ def main():
     features = features[features_to_keep]
     te_features = dataset.get("te_pipeline", pd.DataFrame()).fillna(0)
     nbd_features = dataset.get("nbd_pipeline", pd.DataFrame()).fillna(0)
+    if not nbd_features.empty:
+        nbd_features.rename(
+            columns={"transcript_length": "unspliced_length"}, inplace=True
+        )
 
     scanfold_features = dataset.get("scanfold", pd.DataFrame()).fillna(0)
     if not scanfold_features.empty:
