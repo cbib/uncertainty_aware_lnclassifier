@@ -28,7 +28,10 @@ DEFAULT_N_FOLDS = 1
 
 rule all_cv:
     input:
-        "results/cv_orchestrator/final_report.txt"
+        expand(
+            "results/{expt}/training/cv_training.done",
+            expt=config["experiments"].keys()
+        )
 
 
 #############################
@@ -177,7 +180,7 @@ def prepare_cv_splits_input(wildcards):
         if common is not None:
             fasta_file = common
         else:
-            fasta_file = config["datasets"][expt]["fasta"]
+            fasta_file = config["experiments"][expt]["fasta"]
 
     return {
         "fasta": fasta_file,
@@ -226,14 +229,14 @@ rule aggregate_cv_splits:
 def get_cv_trained_models(wildcards):
     """Helper function to get paths to trained models for a given CV fold."""
     tool_list = [
-            ("cpat", "logit.RData",),
+            ("cpat", "{fold}.logit.RData",),
             ("lncfinder", "{fold}_ss.RData",),
             ("lncfinder", "{fold}_no-ss.RData",),
             ("plncpro", "{fold}.model",),
             ("lncDC", "",),
             ("lncDC_ss", "",),
             ("mRNN", "trained/best_models/",),
-            ("lncrnabert", "models/",),
+            ("lncrnabert", "kmer/models/",),
             ("rnasamba", "{fold}_full.hdf5",)
     ]
 
