@@ -199,9 +199,6 @@ def build_full_feature_set(
     full.fillna(0, inplace=True)
     full = full.apply(pd.to_numeric, errors="coerce")
 
-    # Drop transcript_length feature. RNA_sice_feelnc already captures length info
-    full.drop(columns=["transcript_length"], inplace=True)
-
     numeric_cols = full.select_dtypes(include=[np.number]).columns
     print(
         f"  Keeping {len(numeric_cols)} numeric features "
@@ -306,11 +303,16 @@ def main():
     # ── 2. Load supplementary features ────────────────────────────────────────
     te_df = _try_load(args.te_features, sep=",", label="TE features")
     nbd_df = _try_load(args.nbd_features, sep=",", label="NBD features")
+    if nbd_df is not None:
+        nbd_df.rename(columns={"transcript_length": "unspliced_length"}, inplace=True)
     scanfold_df = _try_load(args.scanfold_features, sep="\t", label="ScanFold features")
     rg4_df = _try_load(args.rg4_features, sep=",", label="rG4 features")
     if scanfold_df is not None:
         scanfold_df.index = scanfold_df.index.str.split(".win").str[0]
         scanfold_df = scanfold_df[~scanfold_df.index.duplicated(keep="first")]
+        scanfold_df.drop(
+            columns=["length", "source_dir"], errors="ignore", inplace=True
+        )
     if rg4_df is not None:
         rg4_df.index = rg4_df.index.str.split("|").str[0]
         rg4_df = rg4_df[~rg4_df.index.duplicated(keep="first")]
