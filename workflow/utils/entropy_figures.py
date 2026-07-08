@@ -81,7 +81,7 @@ FEATURE_LABEL_DICT: dict[str, str] = {
     "all_Frame_Entropy_plncpro": "BLAST hit frame entropy",
     "all_Bitscore_plncpro": "Sum of BLAST hit bitscores",
     "all_HitScore_plncpro": "Sum of BLAST significance scores",
-    # ── TE features (continuous) ──────────────────────────────────────────────
+    # ── REP features (continuous) ──────────────────────────────────────────────
     "te_gaps_max": "Longest gap between TEs",
     "te_sum_hit_length": "Total length of TEs",
     "te_sum_num_fragments": "Total number of TE hit fragments",
@@ -93,6 +93,7 @@ FEATURE_LABEL_DICT: dict[str, str] = {
     "te_max_divergence": "Max TE divergence",
     "global_gaps_max": "Max gap between rep. elements",
     "global_rm_total_length": "Total length of rep. elements",
+    "global_rm_total_length_pct": "Total coverage of rep. elements",
     # ── Non-B DNA features (continuous) ──────────────────────────────────────
     "total_nonb_count": "Total non-B DNA motifs",
     "n_motif_types": "Non-B motif types present",
@@ -104,7 +105,7 @@ FEATURE_LABEL_DICT: dict[str, str] = {
     "str_mean_length_pct": "Mean coverage of STRs",
     "ir_max_length_pct": "Max coverage of an IR",
     "str_max_length_pct": "Max coverage of a STR",
-    # ── TE features (categorical) ─────────────────────────────────────────────
+    # ── REP features (categorical) ─────────────────────────────────────────────
     "te_has_sine": "SINE",
     "te_has_dna": "DNA transposon",
     "te_has_ltr": "LTR",
@@ -115,7 +116,8 @@ FEATURE_LABEL_DICT: dict[str, str] = {
     "lctr_has_simple_repeat": "Simple Repeat",
     "lctr_has_satellite": "Satellite",
     # ── Non-B DNA features (categorical) ─────────────────────────────────────
-    "gq_present": "G-Quadruplex",
+    "gq_plus_present": "G-Quadruplex (+ strand)",
+    "gq_minus_present": "G-Quadruplex (- strand)",
     "z_present": "Z-DNA",
     "tri_present": "Triplex DNA",
     "apr_present": "A-Phased Repeat",
