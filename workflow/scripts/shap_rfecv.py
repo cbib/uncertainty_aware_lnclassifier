@@ -146,6 +146,8 @@ def parse_args():
     # ── supplementary features ────────────────────────────────────────────────
     p.add_argument("--te-features", default="")
     p.add_argument("--nbd-features", default="")
+    p.add_argument("--scanfold-features", default="")
+    p.add_argument("--rg4-features", default="")
 
     # ── feature mode & optional pre-filtering ────────────────────────────────
     p.add_argument(
@@ -252,8 +254,10 @@ def _parse_max_transcripts(val: str):
     return int(val)
 
 
-def load_supplementary(te_path: str, nbd_path: str):
-    def _load_df(path: str, label: str) -> pd.DataFrame:
+def load_supplementary(
+    te_path: str, nbd_path: str, scanfold_path: str = "", rg4_path: str = ""
+):
+    def _load_df(path: str, label: str, sep: str = ",") -> pd.DataFrame:
         if not path:
             print(f"[rfecv] {label} features disabled")
             return pd.DataFrame()
@@ -263,11 +267,11 @@ def load_supplementary(te_path: str, nbd_path: str):
             print(f"[rfecv] {label} features not found at {path} — skipping")
             return pd.DataFrame()
 
-        raw = pd.read_csv(path)
+        raw = pd.read_csv(path, sep=sep)
         if "transcript_id" in raw.columns:
             df = raw.set_index("transcript_id")
         else:
-            df = pd.read_csv(path, index_col=0)
+            df = pd.read_csv(path, sep=sep, index_col=0)
 
         df = df.select_dtypes(include="number").fillna(0)
         if df.empty:
@@ -276,7 +280,16 @@ def load_supplementary(te_path: str, nbd_path: str):
 
     te = _load_df(te_path, "TE")
     nbd = _load_df(nbd_path, "NBD")
-    return te, nbd
+    scanfold = _load_df(scanfold_path, "ScanFold", sep="\t")
+    if not scanfold.empty:
+        scanfold.index = scanfold.index.str.split(".win").str[0]
+        scanfold = scanfold[~scanfold.index.duplicated(keep="first")]
+    rg4 = _load_df(rg4_path, "rG4")
+    if not rg4.empty:
+        rg4.index = rg4.index.str.split("|").str[0]
+        rg4 = rg4[~rg4.index.duplicated(keep="first")]
+        rg4.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+    return te, nbd, scanfold, rg4
 
 
 def build_feature_matrix(
@@ -290,6 +303,8 @@ def build_feature_matrix(
     feature_mode,
     cluster_file,
     cluster_threshold,
+    scanfold_feats=None,
+    rg4_feats=None,
 ):
     """Assemble **training-only** feature matrix for one fold.
 
@@ -331,6 +346,8 @@ def build_feature_matrix(
     real = fold_binary["real"].astype(int)
 
     # ── join supplementary features ───────────────────────────────────────────
+    scanfold_feats = scanfold_feats if scanfold_feats is not None else pd.DataFrame()
+    rg4_feats = rg4_feats if rg4_feats is not None else pd.DataFrame()
     all_feat = fold_features.copy()
     if not te_feats.empty:
         all_feat = all_feat.join(te_feats, how="left")
@@ -338,6 +355,18 @@ def build_feature_matrix(
         all_feat = all_feat.join(nbd_feats, how="left", rsuffix="_nbd")
         all_feat.drop(
             columns=[c for c in all_feat.columns if c.endswith("_nbd")],
+            inplace=True,
+        )
+    if not scanfold_feats.empty:
+        all_feat = all_feat.join(scanfold_feats, how="left", rsuffix="_scanfold")
+        all_feat.drop(
+            columns=[c for c in all_feat.columns if c.endswith("_scanfold")],
+            inplace=True,
+        )
+    if not rg4_feats.empty:
+        all_feat = all_feat.join(rg4_feats, how="left", rsuffix="_rg4")
+        all_feat.drop(
+            columns=[c for c in all_feat.columns if c.endswith("_rg4")],
             inplace=True,
         )
     all_feat = all_feat.fillna(0)
@@ -512,7 +541,9 @@ def main():
     binary = dataset["binary"]
 
     print(f"[rfecv] Loading supplementary features…")
-    te_feats, nbd_feats = load_supplementary(args.te_features, args.nbd_features)
+    te_feats, nbd_feats, scanfold_feats, rg4_feats = load_supplementary(
+        args.te_features, args.nbd_features, args.scanfold_features, args.rg4_features
+    )
 
     print(
         f"[rfecv] Building feature matrix (fold {args.fold}, "
@@ -529,6 +560,8 @@ def main():
         args.feature_mode,
         args.cluster_file,
         args.cluster_threshold,
+        scanfold_feats=scanfold_feats,
+        rg4_feats=rg4_feats,
     )
     print(
         f"[rfecv] Matrix shape: {X.shape}  " f"(class balance: {y.mean():.2%} coding)"

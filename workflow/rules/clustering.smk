@@ -78,6 +78,8 @@ rule feature_clustering:
         binary      = "results/{expt}/tables/{expt}_binary_class_table.tsv",
         te          = lambda wc: _opt_path(_clust_cfg(wc).get("te_features")),
         nbd         = lambda wc: _opt_path(_clust_cfg(wc).get("nbd_features")),
+        scanfold    = lambda wc: _opt_path(_clust_cfg(wc).get("scanfold_features")),
+        rg4         = lambda wc: _opt_path(_clust_cfg(wc).get("rg4_features")),
     output:
         corr_matrix       = "results/{expt}/features/clustering/feature_correlation_matrix.csv",
         dendrogram        = "results/{expt}/features/clustering/feature_correlation_dendrogram.pdf",
@@ -92,6 +94,8 @@ rule feature_clustering:
         nbd_features = lambda wc: _clust_cfg(wc)["nbd_features"],
         te_arg       = lambda wc: _opt_arg("--te-features", _clust_cfg(wc).get("te_features")),
         nbd_arg      = lambda wc: _opt_arg("--nbd-features", _clust_cfg(wc).get("nbd_features")),
+        scanfold_arg = lambda wc: _opt_arg("--scanfold-features", _clust_cfg(wc).get("scanfold_features")),
+        rg4_arg      = lambda wc: _opt_arg("--rg4-features", _clust_cfg(wc).get("rg4_features")),
         corr_method  = lambda wc: _clust_sub(wc).get("corr_method", "spearman"),
         distance_min  = lambda wc: _clust_sub(wc).get("distance_min", 0.05),
         distance_max  = lambda wc: _clust_sub(wc).get("distance_max", 1.60),
@@ -111,6 +115,8 @@ rule feature_clustering:
             --output-dir          {params.output_dir}               \
             {params.te_arg}                                       \
             {params.nbd_arg}                                      \
+            {params.scanfold_arg}                                 \
+            {params.rg4_arg}                                      \
             --corr-method         {params.corr_method}              \
             --distance-min        {params.distance_min}             \
             --distance-max        {params.distance_max}             \

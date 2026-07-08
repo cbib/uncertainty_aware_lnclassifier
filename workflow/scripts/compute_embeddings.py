@@ -72,6 +72,16 @@ def parse_args():
         default="",
         help="Path to NBD pipeline features CSV.  Empty = not used.",
     )
+    parser.add_argument(
+        "--scanfold-features",
+        default="",
+        help="Path to ScanFold features TSV.  Empty = not used.",
+    )
+    parser.add_argument(
+        "--rg4-features",
+        default="",
+        help="Path to rG4detector features CSV.  Empty = not used.",
+    )
 
     # ── Method selection ────────────────────────────────────────────────────
     parser.add_argument(
@@ -162,6 +172,8 @@ def main():
     for path_str, tag in [
         (args.te_features, "TE"),
         (args.nbd_features, "NBD"),
+        (args.scanfold_features, "ScanFold"),
+        (args.rg4_features, "rG4"),
     ]:
         if not path_str:
             continue

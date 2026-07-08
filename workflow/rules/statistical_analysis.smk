@@ -62,6 +62,10 @@ rule statistical_tests:
         groups_tsv="results/{expt}/features/entropy/{expt}_entropy_groups.tsv",
         cluster_file="results/{expt}/features/clustering/feature_clusters_at_distances.csv",
         optimal_threshold="results/{expt}/features/clustering/optimal_threshold.txt",
+        te          = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("te_features")),
+        nbd         = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("nbd_features")),
+        scanfold    = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("scanfold_features")),
+        rg4         = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("rg4_features")),
     output:
         high_entropy_pc_v_lnc_mwu="results/{expt}/features/statistical_analysis/high_entropy_pc_v_lnc_mannwhitney.csv",
         high_entropy_pc_v_lnc_chi2="results/{expt}/features/statistical_analysis/high_entropy_pc_v_lnc_chi2.csv",

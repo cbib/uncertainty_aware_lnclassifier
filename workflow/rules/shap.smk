@@ -126,6 +126,8 @@ rule shap_fold:
         ),
         te_arg           = lambda wc: _opt_arg("--te-features", _shap_cfg(wc).get("te_features")),
         nbd_arg          = lambda wc: _opt_arg("--nbd-features", _shap_cfg(wc).get("nbd_features")),
+        scanfold_arg     = lambda wc: _opt_arg("--scanfold-features", _shap_cfg(wc).get("scanfold_features")),
+        rg4_arg          = lambda wc: _opt_arg("--rg4-features", _shap_cfg(wc).get("rg4_features")),
         max_transcripts  = lambda wc: _max_transcripts(wc),
         background       = lambda wc: _shap_cfg(wc).get("background_sample", 500),
         random_state     = lambda wc: _shap_cfg(wc).get("random_state", 42),
@@ -148,6 +150,8 @@ rule shap_fold:
             --feature-mode   {params.feature_mode} \
             {params.te_arg} \
             {params.nbd_arg} \
+            {params.scanfold_arg} \
+            {params.rg4_arg} \
             --max-transcripts {params.max_transcripts} \
             --background-sample {params.background} \
             --random-state   {params.random_state} \

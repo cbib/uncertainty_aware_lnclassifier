@@ -78,6 +78,18 @@ def parse_args():
         help="Path to Non-B DNA feature CSV (optional; skip if not available).",
     )
     p.add_argument(
+        "--scanfold-features",
+        default=None,
+        metavar="TSV",
+        help="Path to ScanFold feature TSV (optional).",
+    )
+    p.add_argument(
+        "--rg4-features",
+        default=None,
+        metavar="CSV",
+        help="Path to rG4detector feature CSV (optional).",
+    )
+    p.add_argument(
         "--distance-min",
         type=float,
         default=0.05,
@@ -149,9 +161,11 @@ def build_full_feature_set(
     te_df: pd.DataFrame | None,
     nbd_df: pd.DataFrame | None,
     index: pd.Index,
+    scanfold_df: pd.DataFrame | None = None,
+    rg4_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """
-    Concatenate main features with TE and NBD supplementary features.
+    Concatenate main features with TE, NBD, ScanFold, and rG4 supplementary features.
 
     Steps:
         1. Reindex all DataFrames to the common transcript index.
@@ -173,6 +187,12 @@ def build_full_feature_set(
                 columns={"motif_types_present": "n_motif_types"}
             )
         parts.append(nbd_aligned)
+    if scanfold_df is not None:
+        scanfold_aligned = scanfold_df.reindex(index).fillna(0)
+        parts.append(scanfold_aligned)
+    if rg4_df is not None:
+        rg4_aligned = rg4_df.reindex(index).fillna(0)
+        parts.append(rg4_aligned)
 
     full = pd.concat(parts, axis=1)
     full = full.loc[:, ~full.columns.duplicated(keep="first")]
@@ -286,10 +306,21 @@ def main():
     # ── 2. Load supplementary features ────────────────────────────────────────
     te_df = _try_load(args.te_features, sep=",", label="TE features")
     nbd_df = _try_load(args.nbd_features, sep=",", label="NBD features")
+    scanfold_df = _try_load(args.scanfold_features, sep="\t", label="ScanFold features")
+    rg4_df = _try_load(args.rg4_features, sep=",", label="rG4 features")
+    if scanfold_df is not None:
+        scanfold_df.index = scanfold_df.index.str.split(".win").str[0]
+        scanfold_df = scanfold_df[~scanfold_df.index.duplicated(keep="first")]
+    if rg4_df is not None:
+        rg4_df.index = rg4_df.index.str.split("|").str[0]
+        rg4_df = rg4_df[~rg4_df.index.duplicated(keep="first")]
+        rg4_df.drop(columns=["transcript_length"], errors="ignore", inplace=True)
 
     # ── 3. Assemble and clean feature matrix ──────────────────────────────────
     print("\n── Assembling full feature set ──")
-    full = build_full_feature_set(features_filtered, te_df, nbd_df, index)
+    full = build_full_feature_set(
+        features_filtered, te_df, nbd_df, index, scanfold_df, rg4_df
+    )
 
     # ── 4. Separate continuous vs categorical ─────────────────────────────────
     print("\n── Separating continuous / categorical ──")
