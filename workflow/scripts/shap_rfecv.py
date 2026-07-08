@@ -280,10 +280,13 @@ def load_supplementary(
 
     te = _load_df(te_path, "TE")
     nbd = _load_df(nbd_path, "NBD")
+    if not nbd.empty:
+        nbd.rename(columns={"transcript_length": "unspliced_length"}, inplace=True)
     scanfold = _load_df(scanfold_path, "ScanFold", sep="\t")
     if not scanfold.empty:
         scanfold.index = scanfold.index.str.split(".win").str[0]
         scanfold = scanfold[~scanfold.index.duplicated(keep="first")]
+        scanfold.drop(columns=["length", "source_dir"], errors="ignore", inplace=True)
     rg4 = _load_df(rg4_path, "rG4")
     if not rg4.empty:
         rg4.index = rg4.index.str.split("|").str[0]
