@@ -106,7 +106,7 @@ def find_best_pretrained_models(wildcards):
 
 rule all_mrnn:
     input:
-        expand("results/{expt}/training/{fold}/mRNN/trained/best_models", expt=config['inference_datasets'], fold=[f"fold{n}" for n in range(1,6)]),
+        expand("results/{expt}/training/{fold}/mRNN/trained/best_models", expt=config['experiments'], fold=[f"fold{n}" for n in range(1,6)]),
 
 
 ###########################################
