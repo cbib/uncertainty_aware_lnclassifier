@@ -71,6 +71,7 @@ rule feature_clustering:
       - silhouette_scores.csv               : silhouette score + n_clusters at each threshold
       - silhouette_scores.pdf               : silhouette score curve with optimal threshold marked
       - optimal_threshold.txt               : single-line file with the optimal distance value
+      - feature_cluster_membership.csv      : feature → cluster_id + representative at optimal threshold
     """
     input:
         full_table  = "results/{expt}/tables/{expt}_full_table.tsv",
@@ -84,6 +85,7 @@ rule feature_clustering:
         silhouette_csv    = "results/{expt}/features/clustering/silhouette_scores.csv",
         silhouette_pdf    = "results/{expt}/features/clustering/silhouette_scores.pdf",
         optimal_threshold = "results/{expt}/features/clustering/optimal_threshold.txt",
+        membership        = "results/{expt}/features/clustering/feature_cluster_membership.csv",
     params:
         output_dir   = lambda wc: f"results/{wc.expt}/features/clustering",
         te_features  = lambda wc: _clust_cfg(wc)["te_features"],

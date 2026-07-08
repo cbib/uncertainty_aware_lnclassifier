@@ -361,7 +361,16 @@ def main():
     optimal_threshold.write_text(f"{best_dist:.4f}\n")
     print(f"✓ Saved: {optimal_threshold}")
 
-    # ── 8. Silhouette score plot ───────────────────────────────────────────────
+    # ── 8. Cluster membership table at optimal threshold ──────────────────────
+    membership_csv = out_dir / "feature_cluster_membership.csv"
+    opt_col = f"cluster_{best_dist:.2f}"
+    membership = cluster_df[[opt_col]].rename(columns={opt_col: "cluster_id"}).copy()
+    rep_map = membership.reset_index().groupby("cluster_id")["feature"].first()
+    membership["cluster_representative"] = membership["cluster_id"].map(rep_map)
+    membership.to_csv(membership_csv, index_label="feature")
+    print(f"✓ Saved: {membership_csv}")
+
+    # ── 9. Silhouette score plot ───────────────────────────────────────────────
     silhouette_plot = out_dir / "silhouette_scores.pdf"
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.plot(
@@ -389,7 +398,7 @@ def main():
     plt.close(fig)
     print(f"✓ Saved: {silhouette_plot}")
 
-    # ── 9. Dendrogram (using optimal or explicit threshold) ────────────────────
+    # ── 10. Dendrogram (using optimal or explicit threshold) ───────────────────
     print(f"\n── Plotting dendrogram (threshold={dendrogram_thresh:.2f}) ──")
     fig, ax = plt.subplots(figsize=(5, 40))
     hierarchy.dendrogram(
