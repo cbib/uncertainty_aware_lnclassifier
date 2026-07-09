@@ -318,35 +318,29 @@ rule cv_train_all_folds_for_tool:
 # FOLD TESTING RULES #
 ######################
 def get_cv_test_results(wildcards):
-    """Helper function to get paths to trained models for a given CV fold."""
+    """Helper function to get paths to test results for a given CV fold."""
+    tool_list = [
+        ("FEELnc", "{fold}_RF.txt"),
+        ("cpat", "{fold}.cpat.l.ORF_prob.best.tsv"),
+        ("cpat", "{fold}.cpat.p.ORF_prob.best.tsv"),
+        ("lncfinder", "{fold}_ss.lncfinder"),
+        ("lncfinder", "{fold}_no-ss.lncfinder"),
+        ("plncpro", "{fold}.plncpro"),
+        ("lncDC", "{fold}.lncDC.no_ss.csv"),
+        ("lncDC", "{fold}.lncDC.ss.csv"),
+        ("mRNN", "{fold}.mRNN.multi.tsv"),
+        ("lncrnabert", "kmer/classification.csv"),
+        ("rnasamba", "{fold}_full.tsv"),
+    ]
+
     expt = wildcards.expt
-    tool_name = wildcards.tool
-    n_folds = config["experiments"][expt].get("n_folds", DEFAULT_N_FOLDS)
-
-    tool_patterns = {
-        "FEELnc": "{fold}_RF.txt",
-        "CPAT": ["{fold}.cpat.l.ORF_prob.best.tsv", "{fold}.cpat.p.ORF_prob.best.tsv"],
-        "lncfinder": ["{fold}_ss.lncfinder", "{fold}_no-ss.lncfinder"],
-        "plncpro": "{fold}.plncpro",
-        "lncDC": ["{fold}.lncDC.no_ss.csv", "{fold}.lncDC.ss.csv"],
-        "mRNN": "{fold}.mRNN.multi.tsv",
-        "lncrnabert": "kmer/classification.csv",
-        "rnasamba": "{fold}_full.txt"
-    }
-
-    if tool_name not in tool_patterns:
-        raise ValueError(f"Tool '{tool_name}' not recognized.")
-
-    patterns = tool_patterns[tool_name]
-    if not isinstance(patterns, list):
-        patterns = [patterns]
-
+    fold = wildcards.fold
     basedir = f"results/{expt}/testing/{fold}/{{tool}}"
-    models = []
+    results = []
     for tool, path_template in tool_list:
-        model_path = os.path.join(basedir.format(tool=tool), path_template.format(fold=fold))
-        models.append(model_path)
-    return models
+        result_path = os.path.join(basedir.format(tool=tool), path_template.format(expt=expt, fold=fold))
+        results.append(result_path)
+    return results
 
 
 # Request test results for each fold
@@ -437,3 +431,19 @@ rule cv_training_orchestrator:
         echo "CV training complete for {wildcards.expt}" > {log}
         touch {output}
         """
+
+
+def get_all_cv_testing_inputs(wildcards):
+    """Expand testing fold outputs for the orchestrator rule."""
+    for expt in config["to_train"]:
+        n_folds = config["experiments"][expt].get("n_folds", DEFAULT_N_FOLDS)
+        for fold in range(1, n_folds + 1):
+            yield f"results/{expt}/testing/fold{fold}/testing.done"
+
+
+rule cv_test_all_folds:
+    """
+    Target rule to gather all testing results for a given experiment across all folds.
+    """
+    input:
+        get_all_cv_testing_inputs
