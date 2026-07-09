@@ -28,5 +28,6 @@ rule feelnc_codpot_cv:
             --testorftype=4 \
             --outdir={params.outdir} \
             --outname={params.outname} \
+            --minnumtx=20 \
             {params.extra} > {log} 2>&1
         """
