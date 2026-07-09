@@ -14,6 +14,7 @@ training:
 
 experiments:
   toy.cv:
+    reference: gencode.v47
     fasta: "tests/data/toy/toy.transcripts.fa"
     pc_fasta: "tests/data/toy/toy.pc_transcripts.fa"
     lnc_fasta: "tests/data/toy/toy.lncrna_transcripts.fa"
