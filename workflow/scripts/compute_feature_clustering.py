@@ -66,10 +66,16 @@ def parse_args():
         help="Directory where the three output files will be written.",
     )
     p.add_argument(
-        "--te-features",
+        "--te-features-rna",
         default=None,
         metavar="CSV",
-        help="Path to TE pipeline feature CSV (optional; skip if not available).",
+        help="Path to RNA/spliced TE feature CSV (optional).",
+    )
+    p.add_argument(
+        "--te-features-dna",
+        default=None,
+        metavar="CSV",
+        help="Path to DNA/unspliced TE feature CSV (optional).",
     )
     p.add_argument(
         "--nbd-features",
@@ -301,7 +307,17 @@ def main():
     print(f"  Core features: {features_filtered.shape[1]}")
 
     # ── 2. Load supplementary features ────────────────────────────────────────
-    te_df = _try_load(args.te_features, sep=",", label="TE features")
+    te_rna = _try_load(args.te_features_rna, sep=",", label="TE RNA features")
+    if te_rna is not None:
+        te_rna.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+        te_rna.columns = [f"rna_{c}" for c in te_rna.columns]
+    te_dna = _try_load(args.te_features_dna, sep=",", label="TE DNA features")
+    if te_dna is not None:
+        # transcript_length here is the unspliced genomic region length — not used in analysis
+        te_dna.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+        te_dna.columns = [f"dna_{c}" for c in te_dna.columns]
+    te_parts = [df for df in [te_rna, te_dna] if df is not None]
+    te_df = pd.concat(te_parts, axis=1) if te_parts else None
     nbd_df = _try_load(args.nbd_features, sep=",", label="NBD features")
     if nbd_df is not None:
         nbd_df.rename(columns={"transcript_length": "unspliced_length"}, inplace=True)

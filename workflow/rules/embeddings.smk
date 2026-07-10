@@ -46,7 +46,8 @@ rule compute_embeddings:
     input:
         full_table = "results/{expt}/tables/{expt}_full_table.tsv",
         binary     = "results/{expt}/tables/{expt}_binary_class_table.tsv",
-        te         = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("te_features")),
+        te_rna     = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("te_features_rna")),
+        te_dna     = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("te_features_dna")),
         nbd        = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("nbd_features")),
         scanfold   = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("scanfold_features")),
         rg4        = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("rg4_features")),
@@ -54,9 +55,9 @@ rule compute_embeddings:
         flag = "results/{expt}/features/embeddings/embeddings_complete.flag",
     params:
         output_dir      = "results/{expt}/features/embeddings",
-        te_features     = lambda wc: config["feature_analysis"][wc.expt]["te_features"],
         nbd_features    = lambda wc: config["feature_analysis"][wc.expt]["nbd_features"],
-        te_arg          = lambda wc: _opt_arg("--te-features", config["feature_analysis"][wc.expt].get("te_features")),
+        te_rna_arg      = lambda wc: _opt_arg("--te-features-rna", config["feature_analysis"][wc.expt].get("te_features_rna")),
+        te_dna_arg      = lambda wc: _opt_arg("--te-features-dna", config["feature_analysis"][wc.expt].get("te_features_dna")),
         nbd_arg         = lambda wc: _opt_arg("--nbd-features", config["feature_analysis"][wc.expt].get("nbd_features")),
         scanfold_arg    = lambda wc: _opt_arg("--scanfold-features", config["feature_analysis"][wc.expt].get("scanfold_features")),
         rg4_arg         = lambda wc: _opt_arg("--rg4-features", config["feature_analysis"][wc.expt].get("rg4_features")),
@@ -79,7 +80,8 @@ rule compute_embeddings:
             --dataset           {wildcards.expt} \
             --results-dir       results \
             --output-dir        {params.output_dir} \
-            {params.te_arg} \
+            {params.te_rna_arg} \
+            {params.te_dna_arg} \
             {params.nbd_arg} \
             {params.scanfold_arg} \
             {params.rg4_arg} \

@@ -68,7 +68,8 @@ rule rfecv_select:
         imp_plot  = "results/{expt}/features/rfecv/fold{fold}/rfecv_importance.png",
     params:
         out_dir           = "results/{expt}/features/rfecv/fold{fold}",
-        te_arg            = lambda wc: _opt_arg("--te-features", _shap_cfg(wc).get("te_features")),
+        te_rna_arg        = lambda wc: _opt_arg("--te-features-rna", _shap_cfg(wc).get("te_features_rna")),
+        te_dna_arg        = lambda wc: _opt_arg("--te-features-dna", _shap_cfg(wc).get("te_features_dna")),
         nbd_arg           = lambda wc: _opt_arg("--nbd-features", _shap_cfg(wc).get("nbd_features")),
         scanfold_arg      = lambda wc: _opt_arg("--scanfold-features", _shap_cfg(wc).get("scanfold_features")),
         rg4_arg           = lambda wc: _opt_arg("--rg4-features", _shap_cfg(wc).get("rg4_features")),
@@ -102,7 +103,8 @@ rule rfecv_select:
             --fold              {wildcards.fold} \
             --results-dir       results \
             --output-dir        {params.out_dir} \
-            {params.te_arg} \
+            {params.te_rna_arg} \
+            {params.te_dna_arg} \
             {params.nbd_arg} \
             {params.scanfold_arg} \
             {params.rg4_arg} \

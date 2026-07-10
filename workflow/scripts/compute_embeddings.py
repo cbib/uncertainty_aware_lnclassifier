@@ -63,9 +63,14 @@ def parse_args():
 
     # ── Optional supplementary feature files ───────────────────────────────
     parser.add_argument(
-        "--te-features",
+        "--te-features-rna",
         default="",
-        help="Path to TE pipeline features CSV.  Empty = not used.",
+        help="Path to RNA/spliced TE features CSV.  Empty = not used.",
+    )
+    parser.add_argument(
+        "--te-features-dna",
+        default="",
+        help="Path to DNA/unspliced TE features CSV.  Empty = not used.",
     )
     parser.add_argument(
         "--nbd-features",
@@ -170,7 +175,8 @@ def main():
 
     # ── 2. Merge optional supplementary feature files ──────────────────────
     for path_str, tag in [
-        (args.te_features, "TE"),
+        (args.te_features_rna, "rna"),
+        (args.te_features_dna, "dna"),
         (args.nbd_features, "NBD"),
         (args.scanfold_features, "ScanFold"),
         (args.rg4_features, "rG4"),
@@ -187,6 +193,10 @@ def main():
             sep="\t" if p.suffix == ".tsv" else ",",
             index_col=0,
         )
+        if tag in ("rna", "dna"):
+            extra_df.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+            # transcript_length for dna is the unspliced genomic region length — not used in analysis
+            extra_df.columns = [f"{tag}_{c}" for c in extra_df.columns]
         features_df = features_df.join(extra_df, how="left", rsuffix=f"_{tag.lower()}")
         print(f"  Columns after merging {tag}: {features_df.shape[1]}")
 

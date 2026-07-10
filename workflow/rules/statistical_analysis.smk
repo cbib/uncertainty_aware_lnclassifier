@@ -62,7 +62,8 @@ rule statistical_tests:
         groups_tsv="results/{expt}/features/entropy/{expt}_entropy_groups.tsv",
         cluster_file="results/{expt}/features/clustering/feature_clusters_at_distances.csv",
         optimal_threshold="results/{expt}/features/clustering/optimal_threshold.txt",
-        te          = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("te_features")),
+        te_rna      = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("te_features_rna")),
+        te_dna      = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("te_features_dna")),
         nbd         = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("nbd_features")),
         scanfold    = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("scanfold_features")),
         rg4         = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("rg4_features")),
@@ -81,7 +82,8 @@ rule statistical_tests:
         output_dir="results/{expt}/features/statistical_analysis",
         fdr_method=lambda wc: _stat_cfg(wc).get("fdr_method", "fdr_bh"),
         fdr_alpha=lambda wc: _stat_cfg(wc).get("fdr_alpha", 0.01),
-        te_arg=lambda wc: _opt_arg("--te-features", config["feature_analysis"][wc.expt].get("te_features")),
+        te_rna_arg=lambda wc: _opt_arg("--te-features-rna", config["feature_analysis"][wc.expt].get("te_features_rna")),
+        te_dna_arg=lambda wc: _opt_arg("--te-features-dna", config["feature_analysis"][wc.expt].get("te_features_dna")),
         nbd_arg=lambda wc: _opt_arg("--nbd-features", config["feature_analysis"][wc.expt].get("nbd_features")),
         scanfold_arg=lambda wc: _opt_arg("--scanfold-features", config["feature_analysis"][wc.expt].get("scanfold_features")),
         rg4_arg=lambda wc: _opt_arg("--rg4-features", config["feature_analysis"][wc.expt].get("rg4_features")),
@@ -105,7 +107,8 @@ rule statistical_tests:
             --output-dir          {params.output_dir} \
             --entropy-tsv         {input.entropy_tsv} \
             --groups-tsv          {input.groups_tsv} \
-            {params.te_arg} \
+            {params.te_rna_arg} \
+            {params.te_dna_arg} \
             {params.nbd_arg} \
             {params.scanfold_arg} \
             {params.rg4_arg} \

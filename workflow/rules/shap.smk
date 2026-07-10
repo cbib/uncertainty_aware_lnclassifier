@@ -124,7 +124,8 @@ rule shap_fold:
         cluster_thresh   = lambda wc, input: (
             _effective_cluster_threshold(wc) or open(input.optimal_threshold).read().strip()
         ),
-        te_arg           = lambda wc: _opt_arg("--te-features", _shap_cfg(wc).get("te_features")),
+        te_rna_arg       = lambda wc: _opt_arg("--te-features-rna", _shap_cfg(wc).get("te_features_rna")),
+        te_dna_arg       = lambda wc: _opt_arg("--te-features-dna", _shap_cfg(wc).get("te_features_dna")),
         nbd_arg          = lambda wc: _opt_arg("--nbd-features", _shap_cfg(wc).get("nbd_features")),
         scanfold_arg     = lambda wc: _opt_arg("--scanfold-features", _shap_cfg(wc).get("scanfold_features")),
         rg4_arg          = lambda wc: _opt_arg("--rg4-features", _shap_cfg(wc).get("rg4_features")),
@@ -148,7 +149,8 @@ rule shap_fold:
             --results-dir    results \
             --output-dir     {params.out_dir} \
             --feature-mode   {params.feature_mode} \
-            {params.te_arg} \
+            {params.te_rna_arg} \
+            {params.te_dna_arg} \
             {params.nbd_arg} \
             {params.scanfold_arg} \
             {params.rg4_arg} \

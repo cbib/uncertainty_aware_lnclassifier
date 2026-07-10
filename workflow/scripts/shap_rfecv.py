@@ -144,7 +144,8 @@ def parse_args():
     )
 
     # ── supplementary features ────────────────────────────────────────────────
-    p.add_argument("--te-features", default="")
+    p.add_argument("--te-features-rna", default="")
+    p.add_argument("--te-features-dna", default="")
     p.add_argument("--nbd-features", default="")
     p.add_argument("--scanfold-features", default="")
     p.add_argument("--rg4-features", default="")
@@ -255,7 +256,11 @@ def _parse_max_transcripts(val: str):
 
 
 def load_supplementary(
-    te_path: str, nbd_path: str, scanfold_path: str = "", rg4_path: str = ""
+    te_rna_path: str,
+    te_dna_path: str,
+    nbd_path: str,
+    scanfold_path: str = "",
+    rg4_path: str = "",
 ):
     def _load_df(path: str, label: str, sep: str = ",") -> pd.DataFrame:
         if not path:
@@ -278,7 +283,20 @@ def load_supplementary(
             return df
         return remove_constant_features(df)
 
-    te = _load_df(te_path, "TE")
+    te_rna = _load_df(te_rna_path, "TE RNA")
+    if not te_rna.empty:
+        te_rna.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+        te_rna.columns = [f"rna_{c}" for c in te_rna.columns]
+    te_dna = _load_df(te_dna_path, "TE DNA")
+    if not te_dna.empty:
+        # transcript_length here is the unspliced genomic region length — not used in analysis
+        te_dna.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+        te_dna.columns = [f"dna_{c}" for c in te_dna.columns]
+    te = (
+        pd.concat([df for df in [te_rna, te_dna] if not df.empty], axis=1)
+        if any(not df.empty for df in [te_rna, te_dna])
+        else pd.DataFrame()
+    )
     nbd = _load_df(nbd_path, "NBD")
     if not nbd.empty:
         nbd.rename(columns={"transcript_length": "unspliced_length"}, inplace=True)
@@ -545,7 +563,11 @@ def main():
 
     print(f"[rfecv] Loading supplementary features…")
     te_feats, nbd_feats, scanfold_feats, rg4_feats = load_supplementary(
-        args.te_features, args.nbd_features, args.scanfold_features, args.rg4_features
+        args.te_features_rna,
+        args.te_features_dna,
+        args.nbd_features,
+        args.scanfold_features,
+        args.rg4_features,
     )
 
     print(

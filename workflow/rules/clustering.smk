@@ -76,7 +76,8 @@ rule feature_clustering:
     input:
         full_table  = "results/{expt}/tables/{expt}_full_table.tsv",
         binary      = "results/{expt}/tables/{expt}_binary_class_table.tsv",
-        te          = lambda wc: _opt_path(_clust_cfg(wc).get("te_features")),
+        te_rna      = lambda wc: _opt_path(_clust_cfg(wc).get("te_features_rna")),
+        te_dna      = lambda wc: _opt_path(_clust_cfg(wc).get("te_features_dna")),
         nbd         = lambda wc: _opt_path(_clust_cfg(wc).get("nbd_features")),
         scanfold    = lambda wc: _opt_path(_clust_cfg(wc).get("scanfold_features")),
         rg4         = lambda wc: _opt_path(_clust_cfg(wc).get("rg4_features")),
@@ -90,9 +91,9 @@ rule feature_clustering:
         membership        = "results/{expt}/features/clustering/feature_cluster_membership.csv",
     params:
         output_dir   = lambda wc: f"results/{wc.expt}/features/clustering",
-        te_features  = lambda wc: _clust_cfg(wc)["te_features"],
         nbd_features = lambda wc: _clust_cfg(wc)["nbd_features"],
-        te_arg       = lambda wc: _opt_arg("--te-features", _clust_cfg(wc).get("te_features")),
+        te_rna_arg   = lambda wc: _opt_arg("--te-features-rna", _clust_cfg(wc).get("te_features_rna")),
+        te_dna_arg   = lambda wc: _opt_arg("--te-features-dna", _clust_cfg(wc).get("te_features_dna")),
         nbd_arg      = lambda wc: _opt_arg("--nbd-features", _clust_cfg(wc).get("nbd_features")),
         scanfold_arg = lambda wc: _opt_arg("--scanfold-features", _clust_cfg(wc).get("scanfold_features")),
         rg4_arg      = lambda wc: _opt_arg("--rg4-features", _clust_cfg(wc).get("rg4_features")),
@@ -113,7 +114,8 @@ rule feature_clustering:
         python -u workflow/scripts/compute_feature_clustering.py  \
             --dataset             {wildcards.expt}                  \
             --output-dir          {params.output_dir}               \
-            {params.te_arg}                                       \
+            {params.te_rna_arg}                                   \
+            {params.te_dna_arg}                                   \
             {params.nbd_arg}                                      \
             {params.scanfold_arg}                                 \
             {params.rg4_arg}                                      \

@@ -300,9 +300,14 @@ def parse_arguments():
         help="Path to persisted entropy groups TSV (output of compute_entropy_groups.py)",
     )
     parser.add_argument(
-        "--te-features",
+        "--te-features-rna",
         default="",
-        help="Path to TE features (optional)",
+        help="Path to RNA/spliced TE features CSV (optional)",
+    )
+    parser.add_argument(
+        "--te-features-dna",
+        default="",
+        help="Path to DNA/unspliced TE features CSV (optional)",
     )
     parser.add_argument(
         "--nbd-features",
@@ -359,7 +364,8 @@ def main():
     print(f"Loading dataset: {dataset_name}", file=sys.stderr)
     dataset = load_dataset(dataset_name)
     pipelines = {
-        "te_pipeline": args.te_features or None,
+        "te_pipeline_rna": args.te_features_rna or None,
+        "te_pipeline_dna": args.te_features_dna or None,
         "nbd_pipeline": args.nbd_features or None,
         "scanfold": args.scanfold_features or None,
         "rg4": args.rg4_features or None,
@@ -377,7 +383,17 @@ def main():
     features = dataset["features"]
     features_to_keep = filter_feature_columns(features)
     features = features[features_to_keep]
-    te_features = dataset.get("te_pipeline", pd.DataFrame()).fillna(0)
+    te_rna = dataset.get("te_pipeline_rna", pd.DataFrame()).fillna(0)
+    if not te_rna.empty:
+        te_rna.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+        te_rna.columns = [f"rna_{c}" for c in te_rna.columns]
+    te_dna = dataset.get("te_pipeline_dna", pd.DataFrame()).fillna(0)
+    if not te_dna.empty:
+        # transcript_length here is the unspliced genomic region length — not used in analysis
+        te_dna.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+        te_dna.columns = [f"dna_{c}" for c in te_dna.columns]
+    te_parts = [df for df in [te_rna, te_dna] if not df.empty]
+    te_features = pd.concat(te_parts, axis=1) if te_parts else pd.DataFrame()
     nbd_features = dataset.get("nbd_pipeline", pd.DataFrame()).fillna(0)
     if not nbd_features.empty:
         nbd_features.rename(
@@ -405,7 +421,8 @@ def main():
         rg4_features.drop(columns=["transcript_length"], errors="ignore", inplace=True)
 
     if any(
-        df.empty for df in [te_features, nbd_features, scanfold_features, rg4_features]
+        df.empty
+        for df in [te_rna, te_dna, nbd_features, scanfold_features, rg4_features]
     ):
         print("⚠ Some feature sets not loaded", file=sys.stderr)
 
