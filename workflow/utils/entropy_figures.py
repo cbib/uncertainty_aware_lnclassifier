@@ -26,6 +26,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from utils.plotting import color_feature_ticklabels, feature_label
 
 warnings.filterwarnings("ignore")
 
@@ -96,31 +97,31 @@ FEATURE_LABEL_DICT: dict[str, str] = {
     "global_rm_total_length": "Total length of rep. elements",
     "global_rm_total_length_pct": "Total coverage of rep. elements",
     # ── REP features (continuous) — DNA ───────────────────────────────────────
-    "dna_te_gaps_max": "Longest gap between TEs (DNA)",
-    "dna_te_sum_hit_length": "Total length of TEs (DNA)",
-    "dna_te_sum_num_fragments": "Total number of TE hit fragments (DNA)",
-    "dna_te_max_hit_reference_coverage": "Max TE hit reference coverage (DNA)",
-    "dna_te_count": "TE count (DNA)",
-    "dna_te_ltr_count": "LTR count (DNA)",
-    "dna_te_max_hit_length": "Max length of a TE (DNA)",
-    "dna_te_count_per_kb": "TE count per kb (DNA)",
-    "dna_te_max_divergence": "Max TE divergence (DNA)",
-    "dna_global_gaps_max": "Max gap between rep. elements (DNA)",
-    "dna_global_rm_total_length": "Total length of rep. elements (DNA)",
-    "dna_global_rm_total_length_pct": "Total coverage of rep. elements (DNA)",
+    "dna_te_gaps_max": "Longest gap between TEs",
+    "dna_te_sum_hit_length": "Total length of TEs",
+    "dna_te_sum_num_fragments": "Total number of TE hit fragments",
+    "dna_te_max_hit_reference_coverage": "Max TE hit reference coverage",
+    "dna_te_count": "TE count",
+    "dna_te_ltr_count": "LTR count",
+    "dna_te_max_hit_length": "Max length of a TE",
+    "dna_te_count_per_kb": "TE count per kb",
+    "dna_te_max_divergence": "Max TE divergence",
+    "dna_global_gaps_max": "Max gap between rep. elements",
+    "dna_global_rm_total_length": "Total length of rep. elements",
+    "dna_global_rm_total_length_pct": "Total coverage of rep. elements",
     # ── REP features (continuous) — RNA ───────────────────────────────────────
-    "rna_te_gaps_max": "Longest gap between TEs (RNA)",
-    "rna_te_sum_hit_length": "Total length of TEs (RNA)",
-    "rna_te_sum_num_fragments": "Total number of TE hit fragments (RNA)",
-    "rna_te_max_hit_reference_coverage": "Max TE hit reference coverage (RNA)",
-    "rna_te_count": "TE count (RNA)",
-    "rna_te_ltr_count": "LTR count (RNA)",
-    "rna_te_max_hit_length": "Max length of a TE (RNA)",
-    "rna_te_count_per_kb": "TE count per kb (RNA)",
-    "rna_te_max_divergence": "Max TE divergence (RNA)",
-    "rna_global_gaps_max": "Max gap between rep. elements (RNA)",
-    "rna_global_rm_total_length": "Total length of rep. elements (RNA)",
-    "rna_global_rm_total_length_pct": "Total coverage of rep. elements (RNA)",
+    "rna_te_gaps_max": "Longest gap between TEs",
+    "rna_te_sum_hit_length": "Total length of TEs",
+    "rna_te_sum_num_fragments": "Total number of TE hit fragments",
+    "rna_te_max_hit_reference_coverage": "Max TE hit reference coverage",
+    "rna_te_count": "TE count",
+    "rna_te_ltr_count": "LTR count",
+    "rna_te_max_hit_length": "Max length of a TE",
+    "rna_te_count_per_kb": "TE count per kb",
+    "rna_te_max_divergence": "Max TE divergence",
+    "rna_global_gaps_max": "Max gap between rep. elements",
+    "rna_global_rm_total_length": "Total length of rep. elements",
+    "rna_global_rm_total_length_pct": "Total coverage of rep. elements",
     # ── Non-B DNA features (continuous) ──────────────────────────────────────
     "total_nonb_count": "Total non-B DNA motifs",
     "n_motif_types": "Non-B motif types present",
@@ -144,25 +145,25 @@ FEATURE_LABEL_DICT: dict[str, str] = {
     "lctr_has_simple_repeat": "Simple Repeat",
     "lctr_has_satellite": "Satellite",
     # ── REP features (categorical) — DNA ──────────────────────────────────────
-    "dna_te_has_sine": "SINE (DNA)",
-    "dna_te_has_dna": "DNA transposon (DNA)",
-    "dna_te_has_ltr": "LTR (DNA)",
-    "dna_te_has_line": "LINE (DNA)",
-    "dna_te_has_srprna": "srpRNA (DNA)",
-    "dna_pseudo_has_snrna": "snRNA pseudogene (DNA)",
-    "dna_lctr_has_low_complexity": "Low Complexity Region (DNA)",
-    "dna_lctr_has_simple_repeat": "Simple Repeat (DNA)",
-    "dna_lctr_has_satellite": "Satellite (DNA)",
+    "dna_te_has_sine": "SINE",
+    "dna_te_has_dna": "DNA transposon",
+    "dna_te_has_ltr": "LTR",
+    "dna_te_has_line": "LINE",
+    "dna_te_has_srprna": "srpRNA",
+    "dna_pseudo_has_snrna": "snRNA pseudogene",
+    "dna_lctr_has_low_complexity": "Low Complexity Region",
+    "dna_lctr_has_simple_repeat": "Simple Repeat",
+    "dna_lctr_has_satellite": "Satellite",
     # ── REP features (categorical) — RNA ──────────────────────────────────────
-    "rna_te_has_sine": "SINE (RNA)",
-    "rna_te_has_dna": "DNA transposon (RNA)",
-    "rna_te_has_ltr": "LTR (RNA)",
-    "rna_te_has_line": "LINE (RNA)",
-    "rna_te_has_srprna": "srpRNA (RNA)",
-    "rna_pseudo_has_snrna": "snRNA pseudogene (RNA)",
-    "rna_lctr_has_low_complexity": "Low Complexity Region (RNA)",
-    "rna_lctr_has_simple_repeat": "Simple Repeat (RNA)",
-    "rna_lctr_has_satellite": "Satellite (RNA)",
+    "rna_te_has_sine": "SINE",
+    "rna_te_has_dna": "DNA transposon",
+    "rna_te_has_ltr": "LTR",
+    "rna_te_has_line": "LINE",
+    "rna_te_has_srprna": "srpRNA",
+    "rna_pseudo_has_snrna": "snRNA pseudogene",
+    "rna_lctr_has_low_complexity": "Low Complexity Region",
+    "rna_lctr_has_simple_repeat": "Simple Repeat",
+    "rna_lctr_has_satellite": "Satellite",
     # ── Non-B DNA features (categorical) ─────────────────────────────────────
     "gq_plus_present": "G-Quadruplex (+ strand)",
     "gq_minus_present": "G-Quadruplex (- strand)",
@@ -178,8 +179,36 @@ FEATURE_LABEL_DICT: dict[str, str] = {
 # Overwrite categorical feature names for when they are outside of the categorical plot
 FEATURE_LABEL_DICT_SHAP = {
     "te_has_ltr": "LTR presence",
-    "rna_te_has_ltr": "LTR presence (RNA)",
+    "rna_te_has_ltr": "LTR presence",
 }
+
+# Unprefixed features that are genomic-DNA-derived (non-B DNA pipeline). Features
+# carrying an rna_/dna_ prefix are grouped by that prefix; everything else defaults
+# to RNA (spliced-transcript). See utils.plotting.feature_group.
+# ponytail: keep in sync with the two "Non-B DNA features" blocks above.
+DNA_ONLY: frozenset[str] = frozenset(
+    {
+        "total_nonb_count",
+        "n_motif_types",
+        "z_hit_count",
+        "gq_hit_count",
+        "mr_unique_length",
+        "tri_gaps_max",
+        "ir_gaps_mean_pct",
+        "str_mean_length_pct",
+        "ir_max_length_pct",
+        "str_max_length_pct",
+        "gq_plus_present",
+        "gq_minus_present",
+        "z_present",
+        "tri_present",
+        "apr_present",
+        "ir_present",
+        "dr_present",
+        "mr_present",
+        "str_present",
+    }
+)
 
 # ── Feature selection helpers ─────────────────────────────────────────────────
 
@@ -340,10 +369,10 @@ def plot_stat_test_figure(
         mannu_df, cluster_df, cluster_col=cluster_col, n=n_top
     ).copy()
     top_cont["vda_to_plot"] = top_cont["vda"] - 0.5
-    top_cont["label"] = top_cont.index.map(lambda x: FEATURE_LABEL_DICT.get(x, x))
+    top_cont["label"] = top_cont.index.map(lambda x: feature_label(x)[0])
 
     top_cat = chi2_df.sort_values("cramers_v", ascending=False).head(n_top).copy()
-    top_cat["label"] = top_cat.index.map(lambda x: FEATURE_LABEL_DICT.get(x, x))
+    top_cat["label"] = top_cat.index.map(lambda x: feature_label(x)[0])
     top_cat["log10_or"] = np.log10(top_cat["odds_ratio"].replace(0, np.nan))
 
     if cat_freq_df is None:
@@ -351,7 +380,7 @@ def plot_stat_test_figure(
     freq_df = cat_freq_df.reindex(top_cat.index)[["group1", "group2"]].rename(
         columns={"group1": grp1_label, "group2": grp2_label}
     )
-    freq_df["label"] = freq_df.index.map(lambda x: FEATURE_LABEL_DICT.get(x, x))
+    freq_df["label"] = freq_df.index.map(lambda x: feature_label(x)[0])
 
     fig = plt.figure(figsize=(8.5 / 2.54, 15 / 2.54), dpi=300)
     gs = gridspec.GridSpec(
@@ -375,6 +404,7 @@ def plot_stat_test_figure(
             patch.set_edgecolor("none")
     ax0.set_yticks(np.arange(len(top_cont))[::-1])
     ax0.set_yticklabels(top_cont["label"][::-1], fontsize=6)
+    color_feature_ticklabels(ax0, list(top_cont.index[::-1]), axis="y")
     ax0.set_ylabel("", fontsize=6)
     ax0.set_xlabel("Effect size (VDA) \u2212 0.5", fontsize=6)
     ax0.set_xlim(-0.55, 0.55)
@@ -399,6 +429,7 @@ def plot_stat_test_figure(
     )
     ax1.set_yticks(np.arange(len(top_cat))[::-1])
     ax1.set_yticklabels(top_cat["label"][::-1], fontsize=6)
+    color_feature_ticklabels(ax1, list(top_cat.index[::-1]), axis="y")
     ax1.set_ylabel("", fontsize=6)
     ax1.set_xlabel("log10 odds ratio", fontsize=6)
     ax1.set_xlim(*xlim_chi2)
@@ -436,6 +467,7 @@ def plot_stat_test_figure(
     )
     ax2.set_yticks(x_pos)
     ax2.set_yticklabels(freq_df["label"], fontsize=6)
+    color_feature_ticklabels(ax2, list(freq_df.index), axis="y")
     ax2.invert_yaxis()
     ax2.set_xlabel("Transcripts with feature (%)", fontsize=6)
     ax2.set_ylabel("", fontsize=6)

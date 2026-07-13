@@ -45,6 +45,7 @@ from utils.features import (  # noqa: E402
     filter_feature_columns,
     get_categorical_and_continuous_columns,
 )
+from utils.plotting import color_feature_ticklabels, feature_label  # noqa: E402
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
@@ -450,13 +451,17 @@ def main():
     # ── 10. Dendrogram (using optimal or explicit threshold) ───────────────────
     print(f"\n── Plotting dendrogram (threshold={dendrogram_thresh:.2f}) ──")
     fig, ax = plt.subplots(figsize=(5, 40))
-    hierarchy.dendrogram(
+    dn = hierarchy.dendrogram(
         dist_linkage,
         labels=corr_matrix.columns.tolist(),
         ax=ax,
         orientation="left",
         color_threshold=dendrogram_thresh,
     )
+    # Readable, prefix-aware leaf labels coloured by rna/dna group (dn["ivl"] is
+    # the drawn leaf order, matching the y tick labels bottom-to-top).
+    ax.set_yticklabels([feature_label(n)[0] for n in dn["ivl"]])
+    color_feature_ticklabels(ax, dn["ivl"], axis="y")
     ax.axvline(
         dendrogram_thresh,
         color="red",
