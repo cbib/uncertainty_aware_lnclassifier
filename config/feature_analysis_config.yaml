@@ -6,7 +6,7 @@ feature_analysis:
 
     # Supplementary feature files (relative to paper/ working directory)
     te_features_rna:   "te_pipeline/results/gencode.v47/features/all_transcripts_te_features.csv"
-    te_features_dna:   "te_pipeline/results/gencode.v47_unspliced/features/all_transcripts_te_features.csv"
+    te_features_dna:   "te_pipeline/results/gencode.v47.bis_unspliced/features/all_transcripts_te_features.csv"
     nbd_features:      "nonb-pipeline/results/gencode.v47.transcripts/extended_analysis/features_nonb_features.csv"
     scanfold_features: "secondrna/results/gencode.v47.repeat.simple/scanfold_final_partners_stats.tsv"
     rg4_features:      "secondrna/results/gencode.v47/rg4detector/peak_counts.csv"

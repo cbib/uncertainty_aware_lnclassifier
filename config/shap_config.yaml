@@ -19,7 +19,7 @@ shap:
 
     # Supplementary feature files (relative to paper/ working directory)
     te_features_rna:  "te_pipeline/results/gencode.v47/features/all_transcripts_te_features.csv"
-    te_features_dna:  "te_pipeline/results/gencode.v47_unspliced/features/all_transcripts_te_features.csv"
+    te_features_dna:  "te_pipeline/results/gencode.v47.bis_unspliced/features/all_transcripts_te_features.csv"
     nbd_features: "nonb-pipeline/results/gencode.v47/extended_analysis/features_nonb_features.csv"
 
     # Correlation-filtering artefact (used by 'filtered' feature mode)
@@ -54,7 +54,7 @@ shap:
 
     # Supplementary feature files (relative to paper/ working directory)
     te_features_rna:  "te_pipeline/results/gencode.v47/features/all_transcripts_te_features.csv"
-    te_features_dna:  "te_pipeline/results/gencode.v47_unspliced/features/all_transcripts_te_features.csv"
+    te_features_dna:  "te_pipeline/results/gencode.v47.bis_unspliced/features/all_transcripts_te_features.csv"
     nbd_features:  "nonb-pipeline/results/gencode.v47.transcripts/extended_analysis/features_nonb_features.csv"
 
     # Correlation-filtering artefact (used by 'filtered' feature mode)
@@ -88,7 +88,7 @@ shap:
 
     # Supplementary feature files (relative to paper/ working directory)
     te_features_rna:  "te_pipeline/results/gencode.v47/features/all_transcripts_te_features.csv"
-    te_features_dna:  "te_pipeline/results/gencode.v47_unspliced/features/all_transcripts_te_features.csv"
+    te_features_dna:  "te_pipeline/results/gencode.v47.bis_unspliced/features/all_transcripts_te_features.csv"
     nbd_features: null             # excluded for no-NBD analysis
 
     # Correlation-filtering artefact (used by 'filtered' feature mode)
