@@ -34,6 +34,7 @@ from utils.features import (
     check_supplementary_coverage,
     custom_feature_scaling,
     filter_feature_columns,
+    load_supplementary_features,
 )
 
 # ---------------------------------------------------------------------------
@@ -178,31 +179,14 @@ def main():
     )
 
     # ── 2. Load and check optional supplementary feature files ────────────
-    supplementary: dict[str, pd.DataFrame] = {}
-    for path_str, tag in [
-        (args.te_features_rna, "rna"),
-        (args.te_features_dna, "dna"),
-        (args.nbd_features, "NBD"),
-        (args.scanfold_features, "ScanFold"),
-        (args.rg4_features, "rG4"),
-    ]:
-        if not path_str:
-            continue
-        p = Path(path_str)
-        if not p.exists():
-            print(f"Warning: {tag} features file not found: {path_str} — skipping.")
-            continue
-        print(f"Loading {tag} features from {path_str} ...")
-        extra_df = pd.read_csv(
-            p,
-            sep="\t" if p.suffix == ".tsv" else ",",
-            index_col=0,
-        )
-        if tag in ("rna", "dna"):
-            extra_df.drop(columns=["transcript_length"], errors="ignore", inplace=True)
-            # transcript_length for dna is the unspliced genomic region length — not used in analysis
-            extra_df.columns = [f"{tag}_{c}" for c in extra_df.columns]
-        supplementary[tag] = extra_df
+    print("\n── Loading supplementary features ──")
+    supplementary = load_supplementary_features(
+        te_rna_path=args.te_features_rna or "",
+        te_dna_path=args.te_features_dna or "",
+        nbd_path=args.nbd_features or "",
+        scanfold_path=args.scanfold_features or "",
+        rg4_path=args.rg4_features or "",
+    )
 
     # Exclude transcripts absent from any loaded supplementary pipeline before
     # joining — missing transcripts would otherwise receive NaN that silently
@@ -217,7 +201,9 @@ def main():
     features_df = features_df.loc[clean_index]
 
     for tag, extra_df in supplementary.items():
-        features_df = features_df.join(extra_df, how="left", rsuffix=f"_{tag.lower()}")
+        if extra_df.empty:
+            continue
+        features_df = features_df.join(extra_df, how="left", rsuffix=f"_{tag}")
         print(f"  Columns after merging {tag}: {features_df.shape[1]}")
 
     # ── 3. Filter, select numeric columns, drop constants ─────────────────

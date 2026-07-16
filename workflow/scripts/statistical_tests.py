@@ -25,16 +25,12 @@ sys.path.insert(0, str(_WORKFLOW_DIR))
 
 import warnings
 
-from utils.entropy import (
-    load_additional_features,
-    load_dataset,
-    load_entropy_groups,
-    split_entropy_group_indices,
-)
+from utils.entropy import load_dataset, load_entropy_groups, split_entropy_group_indices
 from utils.features import (
     check_supplementary_coverage,
     filter_feature_columns,
     get_categorical_and_continuous_columns,
+    load_supplementary_features,
     remove_constant_features,
 )
 from utils.stats import compute_pairwise_stats
@@ -364,81 +360,28 @@ def main():
     # Load main dataset
     print(f"Loading dataset: {dataset_name}", file=sys.stderr)
     dataset = load_dataset(dataset_name)
-    pipelines = {
-        "te_pipeline_rna": args.te_features_rna or None,
-        "te_pipeline_dna": args.te_features_dna or None,
-        "nbd_pipeline": args.nbd_features or None,
-        "scanfold": args.scanfold_features or None,
-        "rg4": args.rg4_features or None,
-    }
-    dataset.update(
-        load_additional_features(
-            dataset_name,
-            basedir,
-            pipelines=pipelines,
-        )
-    )
 
     probs = dataset["probs"]
     labels = dataset["labels"]
     features = dataset["features"]
     features_to_keep = filter_feature_columns(features)
     features = features[features_to_keep]
-    te_rna = dataset.get("te_pipeline_rna", pd.DataFrame()).fillna(0)
-    if not te_rna.empty:
-        te_rna.drop(columns=["transcript_length"], errors="ignore", inplace=True)
-        te_rna.columns = [f"rna_{c}" for c in te_rna.columns]
-    te_dna = dataset.get("te_pipeline_dna", pd.DataFrame()).fillna(0)
-    if not te_dna.empty:
-        # transcript_length here is the unspliced genomic region length — not used in analysis
-        te_dna.drop(columns=["transcript_length"], errors="ignore", inplace=True)
-        te_dna.columns = [f"dna_{c}" for c in te_dna.columns]
-    te_parts = [df for df in [te_rna, te_dna] if not df.empty]
-    te_features = pd.concat(te_parts, axis=1) if te_parts else pd.DataFrame()
-    nbd_features = dataset.get("nbd_pipeline", pd.DataFrame()).fillna(0)
-    if not nbd_features.empty:
-        nbd_features.rename(
-            columns={"transcript_length": "unspliced_length"}, inplace=True
-        )
 
-    scanfold_features = dataset.get("scanfold", pd.DataFrame()).fillna(0)
-    if not scanfold_features.empty:
-        # index looks like "ENST00000831533.1.win_120.stp_1.csv" — strip window suffix
-        scanfold_features.index = scanfold_features.index.str.split(".win").str[0]
-        # scanfold pipeline is prone to duplicate transcript entries, keep only the first
-        # TODO: Update when ScanFold pipeline is fixed to avoid duplicates
-        scanfold_features = scanfold_features[
-            ~scanfold_features.index.duplicated(keep="first")
-        ]
-        scanfold_features.drop(
-            columns=["source_dir", "length"], errors="ignore", inplace=True
-        )
-
-    rg4_features = dataset.get("rg4", pd.DataFrame()).fillna(0)
-    if not rg4_features.empty:
-        # index looks like "ENST00000832824.1|ENSG...|..." — keep only the transcript id
-        rg4_features.index = rg4_features.index.str.split("|").str[0]
-        rg4_features = rg4_features[~rg4_features.index.duplicated(keep="first")]
-        rg4_features.drop(columns=["transcript_length"], errors="ignore", inplace=True)
-
-    if any(
-        df.empty
-        for df in [te_rna, te_dna, nbd_features, scanfold_features, rg4_features]
-    ):
-        print("⚠ Some feature sets not loaded", file=sys.stderr)
+    # Load supplementary pipeline features with per-pipeline index/column cleaning
+    print("Loading supplementary features…", file=sys.stderr)
+    supplementary = load_supplementary_features(
+        te_rna_path=args.te_features_rna or "",
+        te_dna_path=args.te_features_dna or "",
+        nbd_path=args.nbd_features or "",
+        scanfold_path=args.scanfold_features or "",
+        rg4_path=args.rg4_features or "",
+    )
 
     # Exclude transcripts absent from any loaded supplementary pipeline.
     # Keeping them would silently zero all their pipeline features (fillna(0)),
     # biasing effect-size estimates toward zero for their group.
     clean_index, exclusion_report = check_supplementary_coverage(
-        features.index,
-        {
-            "te_pipeline_rna": te_rna,
-            "te_pipeline_dna": te_dna,
-            "nbd_pipeline": nbd_features,
-            "scanfold": scanfold_features,
-            "rg4": rg4_features,
-        },
+        features.index, supplementary
     )
     if not exclusion_report.empty:
         excl_path = Path(args.output_dir) / "excluded_transcripts.tsv"
@@ -450,6 +393,15 @@ def main():
     features = features.loc[clean_index]
     probs = probs.loc[clean_index]
     labels = labels.loc[clean_index]
+
+    # Apply intra-pipeline NaN imputation (transcript present but feature not computed)
+    te_rna = supplementary["te_rna"].fillna(0)
+    te_dna = supplementary["te_dna"].fillna(0)
+    te_parts = [df for df in [te_rna, te_dna] if not df.empty]
+    te_features = pd.concat(te_parts, axis=1) if te_parts else pd.DataFrame()
+    nbd_features = supplementary["nbd"].fillna(0)
+    scanfold_features = supplementary["scanfold"].fillna(0)
+    rg4_features = supplementary["rg4"].fillna(0)
 
     # Load entropy metrics
     entropy_df = pd.read_csv(args.entropy_tsv, sep="\t", index_col=0)

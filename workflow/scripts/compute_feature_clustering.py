@@ -45,6 +45,7 @@ from utils.features import (  # noqa: E402
     check_supplementary_coverage,
     filter_feature_columns,
     get_categorical_and_continuous_columns,
+    load_supplementary_features,
 )
 from utils.plotting import color_feature_ticklabels, feature_label  # noqa: E402
 
@@ -141,24 +142,6 @@ def parse_args():
         help="Recompute even if output files already exist.",
     )
     return p.parse_args()
-
-
-# ── Loading helpers ─────────────────────────────────────────────────────────────
-
-
-def _try_load(
-    path_str: str | None, sep: str = ",", label: str = ""
-) -> pd.DataFrame | None:
-    """Load a CSV/TSV file if path is given and file exists, else return None."""
-    if not path_str:
-        return None
-    p = Path(path_str)
-    if not p.exists():
-        print(f"⚠  {label} not found at {p} — skipping.")
-        return None
-    df = pd.read_csv(p, sep=sep, index_col=0)
-    print(f"✓  Loaded {label}: {df.shape[0]:,} rows × {df.shape[1]} cols")
-    return df
 
 
 # ── Feature assembly ────────────────────────────────────────────────────────────
@@ -309,53 +292,35 @@ def main():
     print(f"  Core features: {features_filtered.shape[1]}")
 
     # ── 2. Load supplementary features ────────────────────────────────────────
-    te_rna = _try_load(args.te_features_rna, sep=",", label="TE RNA features")
-    if te_rna is not None:
-        te_rna.drop(columns=["transcript_length"], errors="ignore", inplace=True)
-        te_rna.columns = [f"rna_{c}" for c in te_rna.columns]
-    te_dna = _try_load(args.te_features_dna, sep=",", label="TE DNA features")
-    if te_dna is not None:
-        # transcript_length here is the unspliced genomic region length — not used in analysis
-        te_dna.drop(columns=["transcript_length"], errors="ignore", inplace=True)
-        te_dna.columns = [f"dna_{c}" for c in te_dna.columns]
-    te_parts = [df for df in [te_rna, te_dna] if df is not None]
-    te_df = pd.concat(te_parts, axis=1) if te_parts else None
-    nbd_df = _try_load(args.nbd_features, sep=",", label="NBD features")
-    if nbd_df is not None:
-        nbd_df.rename(columns={"transcript_length": "unspliced_length"}, inplace=True)
-    scanfold_df = _try_load(args.scanfold_features, sep="\t", label="ScanFold features")
-    rg4_df = _try_load(args.rg4_features, sep=",", label="rG4 features")
-    if scanfold_df is not None:
-        scanfold_df.index = scanfold_df.index.str.split(".win").str[0]
-        scanfold_df = scanfold_df[~scanfold_df.index.duplicated(keep="first")]
-        scanfold_df.drop(
-            columns=["length", "source_dir"], errors="ignore", inplace=True
-        )
-    if rg4_df is not None:
-        rg4_df.index = rg4_df.index.str.split("|").str[0]
-        rg4_df = rg4_df[~rg4_df.index.duplicated(keep="first")]
-        rg4_df.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+    print("\n── Loading supplementary features ──")
+    supplementary = load_supplementary_features(
+        te_rna_path=args.te_features_rna or "",
+        te_dna_path=args.te_features_dna or "",
+        nbd_path=args.nbd_features or "",
+        scanfold_path=args.scanfold_features or "",
+        rg4_path=args.rg4_features or "",
+    )
 
     # ── 3. Exclude transcripts absent from any supplementary pipeline ─────────
     # Missing transcripts would be silently zeroed by reindex().fillna(0) in
     # build_full_feature_set, biasing correlation estimates.
-    clean_index, excl_report = check_supplementary_coverage(
-        index,
-        {
-            k: v if v is not None else pd.DataFrame()
-            for k, v in {
-                "te": te_df,
-                "nbd": nbd_df,
-                "scanfold": scanfold_df,
-                "rg4": rg4_df,
-            }.items()
-        },
-    )
+    clean_index, excl_report = check_supplementary_coverage(index, supplementary)
     if not excl_report.empty:
         excl_path = out_dir / "excluded_transcripts.tsv"
         excl_report.to_csv(excl_path, sep="\t")
         print(f"✓ Exclusion report: {excl_path} ({len(excl_report)} transcripts)")
     index = clean_index
+
+    # Extract individual DFs for build_full_feature_set (None = disabled)
+    te_parts = [
+        supplementary[k] for k in ("te_rna", "te_dna") if not supplementary[k].empty
+    ]
+    te_df = pd.concat(te_parts, axis=1) if te_parts else None
+    nbd_df = supplementary["nbd"] if not supplementary["nbd"].empty else None
+    scanfold_df = (
+        supplementary["scanfold"] if not supplementary["scanfold"].empty else None
+    )
+    rg4_df = supplementary["rg4"] if not supplementary["rg4"].empty else None
 
     # ── 4. Assemble and clean feature matrix ──────────────────────────────────
     print("\n── Assembling full feature set ──")

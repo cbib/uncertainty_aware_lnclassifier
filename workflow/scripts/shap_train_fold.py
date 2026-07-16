@@ -37,6 +37,7 @@ from utils.entropy import load_dataset
 from utils.features import (
     check_supplementary_coverage,
     filter_feature_columns,
+    load_supplementary_features,
     remove_constant_features,
 )
 from utils.parsing import simple_load_ids
@@ -150,74 +151,19 @@ def _max_transcripts(val: str):
     return int(val)
 
 
-def load_supplementary_features(
-    te_rna_path: str,
-    te_dna_path: str,
-    nbd_path: str,
-    scanfold_path: str = "",
-    rg4_path: str = "",
-):
-    def _load_df(path: str, label: str, sep: str = ",") -> pd.DataFrame:
-        if not path:
-            print(f"[supplementary] {label}: disabled")
-            return pd.DataFrame()
-
-        p = Path(path)
-        if not p.exists():
-            print(f"[supplementary] {label}: not found at {path} — skipping")
-            return pd.DataFrame()
-
-        raw = pd.read_csv(path, sep=sep)
-        if "transcript_id" in raw.columns:
-            df = raw.set_index("transcript_id")
-        else:
-            # Fallback for files already indexed by transcript ID.
-            df = pd.read_csv(path, sep=sep, index_col=0)
-
-        # Convert boolean/object True-False columns to int (0/1)
-        # leaving non-boolean columns unchanged
-        bool_like = df.select_dtypes(include=["object", "bool"])
-        if not bool_like.empty:
-            bool_map = {True: 1, False: 0, "True": 1, "False": 0}
-            df[bool_like.columns] = bool_like.apply(
-                lambda s: pd.to_numeric(s.map(bool_map), errors="ignore")
-            )
-
-        # Keep only numeric, fill NaNs with 0, and remove constant features
-        df = df.select_dtypes(include="number")
-        df = df.fillna(0)
-        if df.empty:
-            return df
-        df = remove_constant_features(df)
-
+def _numeric_clean(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert bool/object True-False to int, keep numeric columns, fillna(0), drop constants."""
+    if df.empty:
         return df
-
-    te_rna = _load_df(te_rna_path, "TE RNA")
-    if not te_rna.empty:
-        te_rna.columns = [f"rna_{c}" for c in te_rna.columns]
-    te_dna = _load_df(te_dna_path, "TE DNA")
-    if not te_dna.empty:
-        # transcript_length here is the unspliced genomic region length; dropped by _load_df above
-        te_dna.columns = [f"dna_{c}" for c in te_dna.columns]
-    te = (
-        pd.concat([df for df in [te_rna, te_dna] if not df.empty], axis=1)
-        if any(not df.empty for df in [te_rna, te_dna])
-        else pd.DataFrame()
-    )
-    nbd = _load_df(nbd_path, "NBD")
-    if not nbd.empty:
-        nbd.rename(columns={"transcript_length": "unspliced_length"}, inplace=True)
-    scanfold = _load_df(scanfold_path, "ScanFold", sep="\t")
-    if not scanfold.empty:
-        scanfold.index = scanfold.index.str.split(".win").str[0]
-        scanfold = scanfold[~scanfold.index.duplicated(keep="first")]
-        scanfold.drop(columns=["length", "source_dir"], errors="ignore", inplace=True)
-    rg4 = _load_df(rg4_path, "rG4")
-    if not rg4.empty:
-        rg4.index = rg4.index.str.split("|").str[0]
-        rg4 = rg4[~rg4.index.duplicated(keep="first")]
-        rg4.drop(columns=["transcript_length"], errors="ignore", inplace=True)
-    return te, nbd, scanfold, rg4
+    bool_like = df.select_dtypes(include=["object", "bool"])
+    if not bool_like.empty:
+        bool_map = {True: 1, False: 0, "True": 1, "False": 0}
+        df = df.copy()
+        df[bool_like.columns] = bool_like.apply(
+            lambda s: pd.to_numeric(s.map(bool_map), errors="ignore")
+        )
+    df = df.select_dtypes(include="number").fillna(0)
+    return remove_constant_features(df) if not df.empty else df
 
 
 def build_fold_features(
@@ -402,29 +348,20 @@ def main():
     binary = dataset["binary"]
 
     print(f"[fold {args.fold}] Loading supplementary features…")
-    te_feats, nbd_feats, scanfold_feats, rg4_feats = load_supplementary_features(
-        args.te_features_rna,
-        args.te_features_dna,
-        args.nbd_features,
-        args.scanfold_features,
-        args.rg4_features,
+    supplementary = load_supplementary_features(
+        te_rna_path=args.te_features_rna,
+        te_dna_path=args.te_features_dna,
+        nbd_path=args.nbd_features,
+        scanfold_path=args.scanfold_features,
+        rg4_path=args.rg4_features,
     )
-    print(
-        f"[fold {args.fold}]   TE={te_feats.shape[1]} cols, NBD={nbd_feats.shape[1]} cols, "
-        f"ScanFold={scanfold_feats.shape[1] if not scanfold_feats.empty else 0} cols, "
-        f"rG4={rg4_feats.shape[1] if not rg4_feats.empty else 0} cols"
-    )
+    # Apply numeric-only cleanup required by the RF pipeline
+    supplementary = {k: _numeric_clean(v) for k, v in supplementary.items()}
 
     # Exclude transcripts absent from any loaded supplementary pipeline before
     # fold splitting — missing transcripts would otherwise be silently zeroed.
     clean_index, excl_report = check_supplementary_coverage(
-        features_df.index,
-        {
-            "te": te_feats,
-            "nbd": nbd_feats,
-            "scanfold": scanfold_feats,
-            "rg4": rg4_feats,
-        },
+        features_df.index, supplementary
     )
     if not excl_report.empty:
         excl_path = out_dir / "excluded_transcripts.tsv"
@@ -434,6 +371,28 @@ def main():
         )
     features_df = features_df.loc[clean_index]
     binary = binary.loc[binary.index.isin(clean_index)]
+
+    # Extract individual DFs expected by build_fold_features
+    te_feats = (
+        pd.concat(
+            [
+                supplementary[k]
+                for k in ("te_rna", "te_dna")
+                if not supplementary[k].empty
+            ],
+            axis=1,
+        )
+        if any(not supplementary[k].empty for k in ("te_rna", "te_dna"))
+        else pd.DataFrame()
+    )
+    nbd_feats = supplementary["nbd"]
+    scanfold_feats = supplementary["scanfold"]
+    rg4_feats = supplementary["rg4"]
+    print(
+        f"[fold {args.fold}]   TE={te_feats.shape[1]} cols, NBD={nbd_feats.shape[1]} cols, "
+        f"ScanFold={scanfold_feats.shape[1] if not scanfold_feats.empty else 0} cols, "
+        f"rG4={rg4_feats.shape[1] if not rg4_feats.empty else 0} cols"
+    )
 
     # ── feature list: consensus JSON takes priority over cluster-file ─────────
     top_feats = None

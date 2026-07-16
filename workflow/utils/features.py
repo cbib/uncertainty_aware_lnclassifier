@@ -377,4 +377,103 @@ def check_supplementary_coverage(
     )
     return main_index[~any_missing], report
 
-    return features_pca, pca
+
+# ============================================================================
+# SUPPLEMENTARY PIPELINE LOADER
+# ============================================================================
+
+
+def _read_pipeline_file(path: str, sep: str = ",", label: str = "") -> pd.DataFrame:
+    """Read a supplementary pipeline CSV/TSV; return empty DataFrame if path is falsy or missing."""
+    from pathlib import (  # local import — utils/features.py has no top-level Path import
+        Path,
+    )
+
+    if not path:
+        return pd.DataFrame()
+    p = Path(path)
+    if not p.exists():
+        print(f"⚠  {label}: not found at {p} — skipping")
+        return pd.DataFrame()
+    df = pd.read_csv(p, sep=sep, index_col=0)
+    # Some pipeline outputs use transcript_id as a column rather than the index
+    if "transcript_id" in df.columns:
+        df = df.set_index("transcript_id")
+    print(f"   {label}: {df.shape[0]:,} rows × {df.shape[1]} cols")
+    return df
+
+
+def load_supplementary_features(
+    te_rna_path: str = "",
+    te_dna_path: str = "",
+    nbd_path: str = "",
+    scanfold_path: str = "",
+    rg4_path: str = "",
+) -> dict[str, pd.DataFrame]:
+    """
+    Load supplementary pipeline feature files, applying per-pipeline index and
+    column transformations.
+
+    Does **not** apply numeric-type filtering, ``fillna``, or
+    ``remove_constant_features`` — those differ per downstream step and remain
+    the caller's responsibility.
+
+    Parameters
+    ----------
+    te_rna_path   : path to RNA/spliced TE features CSV
+    te_dna_path   : path to DNA/unspliced TE features CSV
+    nbd_path      : path to Non-B DNA features CSV
+    scanfold_path : path to ScanFold features TSV
+    rg4_path      : path to rG4detector features CSV
+
+    Returns
+    -------
+    dict[str, pd.DataFrame]
+        Keys: ``te_rna``, ``te_dna``, ``nbd``, ``scanfold``, ``rg4``.
+        Empty DataFrame for any disabled or missing pipeline.
+        Suitable for direct use with :func:`check_supplementary_coverage`.
+
+    Per-pipeline transformations
+    ----------------------------
+    te_rna   : drops ``transcript_length``; prefixes columns with ``rna_``
+    te_dna   : drops ``transcript_length`` (unspliced genomic length); prefixes with ``dna_``
+    nbd      : renames ``transcript_length`` → ``unspliced_length``
+    scanfold : strips ``.win*`` suffix from index; deduplicates; drops ``length``, ``source_dir``
+    rg4      : strips ``|…`` from index (keeps transcript ID only); deduplicates; drops ``transcript_length``
+    """
+    te_rna = _read_pipeline_file(te_rna_path, sep=",", label="TE RNA")
+    if not te_rna.empty:
+        te_rna.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+        te_rna.columns = [f"rna_{c}" for c in te_rna.columns]
+
+    te_dna = _read_pipeline_file(te_dna_path, sep=",", label="TE DNA")
+    if not te_dna.empty:
+        te_dna.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+        te_dna.columns = [f"dna_{c}" for c in te_dna.columns]
+
+    nbd = _read_pipeline_file(nbd_path, sep=",", label="NBD")
+    if not nbd.empty:
+        nbd.rename(columns={"transcript_length": "unspliced_length"}, inplace=True)
+
+    scanfold = _read_pipeline_file(scanfold_path, sep="\t", label="ScanFold")
+    if not scanfold.empty:
+        # Index looks like "ENST00000831533.1.win_120.stp_1.csv" — strip window suffix
+        scanfold.index = scanfold.index.str.split(".win").str[0]
+        # ponytail: keep-first dedup; TODO remove when ScanFold pipeline stops emitting duplicates
+        scanfold = scanfold[~scanfold.index.duplicated(keep="first")]
+        scanfold.drop(columns=["length", "source_dir"], errors="ignore", inplace=True)
+
+    rg4 = _read_pipeline_file(rg4_path, sep=",", label="rG4")
+    if not rg4.empty:
+        # Index looks like "ENST00000832824.1|ENSG...|..." — keep only the transcript ID
+        rg4.index = rg4.index.str.split("|").str[0]
+        rg4 = rg4[~rg4.index.duplicated(keep="first")]
+        rg4.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+
+    return {
+        "te_rna": te_rna,
+        "te_dna": te_dna,
+        "nbd": nbd,
+        "scanfold": scanfold,
+        "rg4": rg4,
+    }
