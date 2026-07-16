@@ -39,8 +39,8 @@ plt.rcParams["svg.fonttype"] = "none"
 COLORS = {
     "lnc": "#9467bd",
     "pc": "#d95f02",
-    "rna": "#1b7837",  # spliced RNA TE features
-    "dna": "#762a83",  # unspliced DNA TE features
+    "rna": "#000000",  # spliced RNA TE features
+    "dna": "#888888",  # unspliced DNA TE features
     "entropy_class": {"low": "#2ecc71", "other": "#95a5a6", "high": "#e74c3c"},
     "entropy_class_separated": {
         "low_coding": "#1a9850",
