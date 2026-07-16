@@ -61,7 +61,11 @@ warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(Path(__file__).parents[1]))  # paper/workflow/
 from utils.entropy import load_dataset
-from utils.features import filter_feature_columns, remove_constant_features
+from utils.features import (
+    check_supplementary_coverage,
+    filter_feature_columns,
+    remove_constant_features,
+)
 from utils.parsing import simple_load_ids
 
 # ── RF wrapper that uses permutation importance for RFECV ranking ─────────────
@@ -569,6 +573,26 @@ def main():
         args.scanfold_features,
         args.rg4_features,
     )
+
+    # Exclude transcripts absent from any loaded supplementary pipeline before
+    # fold splitting — missing transcripts would otherwise be silently zeroed.
+    clean_index, excl_report = check_supplementary_coverage(
+        features_df.index,
+        {
+            "te": te_feats,
+            "nbd": nbd_feats,
+            "scanfold": scanfold_feats,
+            "rg4": rg4_feats,
+        },
+    )
+    if not excl_report.empty:
+        excl_path = out_dir / "excluded_transcripts.tsv"
+        excl_report.to_csv(excl_path, sep="\t")
+        print(
+            f"[rfecv]   Exclusion report: {excl_path} ({len(excl_report)} transcripts)"
+        )
+    features_df = features_df.loc[clean_index]
+    binary = binary.loc[binary.index.isin(clean_index)]
 
     print(
         f"[rfecv] Building feature matrix (fold {args.fold}, "

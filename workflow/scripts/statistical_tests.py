@@ -32,6 +32,7 @@ from utils.entropy import (
     split_entropy_group_indices,
 )
 from utils.features import (
+    check_supplementary_coverage,
     filter_feature_columns,
     get_categorical_and_continuous_columns,
     remove_constant_features,
@@ -425,6 +426,30 @@ def main():
         for df in [te_rna, te_dna, nbd_features, scanfold_features, rg4_features]
     ):
         print("⚠ Some feature sets not loaded", file=sys.stderr)
+
+    # Exclude transcripts absent from any loaded supplementary pipeline.
+    # Keeping them would silently zero all their pipeline features (fillna(0)),
+    # biasing effect-size estimates toward zero for their group.
+    clean_index, exclusion_report = check_supplementary_coverage(
+        features.index,
+        {
+            "te_pipeline_rna": te_rna,
+            "te_pipeline_dna": te_dna,
+            "nbd_pipeline": nbd_features,
+            "scanfold": scanfold_features,
+            "rg4": rg4_features,
+        },
+    )
+    if not exclusion_report.empty:
+        excl_path = Path(args.output_dir) / "excluded_transcripts.tsv"
+        exclusion_report.to_csv(excl_path, sep="\t")
+        print(
+            f"✓ Exclusion report: {excl_path} ({len(exclusion_report)} transcripts)",
+            file=sys.stderr,
+        )
+    features = features.loc[clean_index]
+    probs = probs.loc[clean_index]
+    labels = labels.loc[clean_index]
 
     # Load entropy metrics
     entropy_df = pd.read_csv(args.entropy_tsv, sep="\t", index_col=0)

@@ -30,7 +30,11 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from utils.embeddings import EmbeddingPipeline
 from utils.entropy import load_dataset
-from utils.features import custom_feature_scaling, filter_feature_columns
+from utils.features import (
+    check_supplementary_coverage,
+    custom_feature_scaling,
+    filter_feature_columns,
+)
 
 # ---------------------------------------------------------------------------
 # Argument parsing
@@ -173,7 +177,8 @@ def main():
         f"raw columns: {features_df.shape[1]}"
     )
 
-    # ── 2. Merge optional supplementary feature files ──────────────────────
+    # ── 2. Load and check optional supplementary feature files ────────────
+    supplementary: dict[str, pd.DataFrame] = {}
     for path_str, tag in [
         (args.te_features_rna, "rna"),
         (args.te_features_dna, "dna"),
@@ -197,6 +202,21 @@ def main():
             extra_df.drop(columns=["transcript_length"], errors="ignore", inplace=True)
             # transcript_length for dna is the unspliced genomic region length — not used in analysis
             extra_df.columns = [f"{tag}_{c}" for c in extra_df.columns]
+        supplementary[tag] = extra_df
+
+    # Exclude transcripts absent from any loaded supplementary pipeline before
+    # joining — missing transcripts would otherwise receive NaN that silently
+    # becomes zero after scaling, biasing the embedding.
+    clean_index, excl_report = check_supplementary_coverage(
+        features_df.index, supplementary
+    )
+    if not excl_report.empty:
+        excl_path = output_dir / "excluded_transcripts.tsv"
+        excl_report.to_csv(excl_path, sep="\t")
+        print(f"  Exclusion report: {excl_path} ({len(excl_report)} transcripts)")
+    features_df = features_df.loc[clean_index]
+
+    for tag, extra_df in supplementary.items():
         features_df = features_df.join(extra_df, how="left", rsuffix=f"_{tag.lower()}")
         print(f"  Columns after merging {tag}: {features_df.shape[1]}")
 

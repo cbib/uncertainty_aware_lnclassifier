@@ -34,7 +34,11 @@ warnings.filterwarnings("ignore")
 # ── import project utils ─────────────────────────────────────────────────────
 sys.path.insert(0, str(Path(__file__).parents[1]))  # paper/workflow/
 from utils.entropy import load_dataset
-from utils.features import filter_feature_columns, remove_constant_features
+from utils.features import (
+    check_supplementary_coverage,
+    filter_feature_columns,
+    remove_constant_features,
+)
 from utils.parsing import simple_load_ids
 
 
@@ -410,6 +414,26 @@ def main():
         f"ScanFold={scanfold_feats.shape[1] if not scanfold_feats.empty else 0} cols, "
         f"rG4={rg4_feats.shape[1] if not rg4_feats.empty else 0} cols"
     )
+
+    # Exclude transcripts absent from any loaded supplementary pipeline before
+    # fold splitting — missing transcripts would otherwise be silently zeroed.
+    clean_index, excl_report = check_supplementary_coverage(
+        features_df.index,
+        {
+            "te": te_feats,
+            "nbd": nbd_feats,
+            "scanfold": scanfold_feats,
+            "rg4": rg4_feats,
+        },
+    )
+    if not excl_report.empty:
+        excl_path = out_dir / "excluded_transcripts.tsv"
+        excl_report.to_csv(excl_path, sep="\t")
+        print(
+            f"[fold {args.fold}]   Exclusion report: {excl_path} ({len(excl_report)} transcripts)"
+        )
+    features_df = features_df.loc[clean_index]
+    binary = binary.loc[binary.index.isin(clean_index)]
 
     # ── feature list: consensus JSON takes priority over cluster-file ─────────
     top_feats = None

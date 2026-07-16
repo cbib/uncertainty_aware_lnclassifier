@@ -443,6 +443,54 @@ def create_binary_classification_table(simple_class_df: pd.DataFrame) -> pd.Data
     return binary_df
 
 
+def create_dropout_report(simple_class_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Report which transcripts were excluded from the binary classification table
+    and which tool(s) caused the exclusion (missing output → NaN label column).
+
+    Parameters
+    ----------
+    simple_class_df : pd.DataFrame
+        Output of create_simple_classification_table() — index = seq_ID,
+        columns include ``label_<tool>`` and ``biotype``.
+
+    Returns
+    -------
+    pd.DataFrame indexed by seq_ID with columns:
+        biotype        – transcript biotype
+        missing_tools  – comma-separated tool names that produced no output
+        n_missing      – number of missing tools
+        reason         – human-readable summary
+    """
+    label_cols = [c for c in simple_class_df.columns if c.startswith("label_")]
+    nan_mask = simple_class_df[label_cols].isna()
+    dropped = simple_class_df[nan_mask.any(axis=1)].copy()
+
+    tool_names = [c.removeprefix("label_") for c in label_cols]
+    nan_flags = nan_mask.loc[dropped.index]
+    nan_flags.columns = tool_names
+
+    missing_tools = nan_flags.apply(
+        lambda row: ",".join(t for t, v in zip(tool_names, row) if v), axis=1
+    )
+    report = pd.DataFrame(
+        {
+            "biotype": dropped.get("biotype", pd.Series(dtype=str)),
+            "missing_tools": missing_tools,
+            "n_missing": nan_flags.sum(axis=1),
+            "reason": missing_tools.apply(lambda t: f"No output from: {t}"),
+        },
+        index=dropped.index,
+    )
+    report.index.name = "seq_ID"
+    missing_tool_names = [t for t in tool_names if nan_flags[t].any()]
+    logger.info(
+        f"  Dropout report: {len(report)} transcripts excluded "
+        f"(tools with missing output: {', '.join(missing_tool_names)})"
+    )
+    return report
+
+
 def create_all_tables(
     df: pd.DataFrame, pc_ids: list[str], lnc_ids: list[str], output_prefix: str
 ) -> dict[str, pd.DataFrame]:

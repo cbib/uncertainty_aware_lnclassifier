@@ -24,7 +24,30 @@ try:
         setup_snakemake_logging,
     )
     from utils.parsing import parse_gencode_ids, simple_load_ids
-    from utils.process_tools import *
+    from utils.process_tools import (
+        LABEL_COLUMN_RENAMES,
+        ToolConfig,
+        add_metadata_columns,
+        create_binary_classification_table,
+        create_classification_table,
+        create_dropout_report,
+        create_simple_classification_table,
+        create_unclassified_table,
+        get_classification_scores,
+        load_reference_transcripts,
+        merge_all_tools,
+        process_cpat,
+        process_cpc2,
+        process_feelnc,
+        process_lncadeep,
+        process_lncdc,
+        process_lncfinder,
+        process_lncrnabert,
+        process_lncrnanet,
+        process_mrnn,
+        process_plncpro,
+        process_rnasamba,
+    )
 except ImportError as e:
     print(f"Error importing from workflow utils: {e}", file=sys.stderr)
     print(f"Script dir: {script_dir}", file=sys.stderr)
@@ -176,10 +199,18 @@ binary_class_path = f"{output_prefix}_binary_class_table.tsv"
 logger.info(f"Writing binary classification table to {binary_class_path}")
 binary_class_df.to_csv(binary_class_path, sep="\t")
 
+# Report which transcripts were excluded and which tool(s) caused each exclusion
+dropout_report_df = create_dropout_report(simple_class_df)
+dropout_report_path = f"{output_prefix}_dropout_report.tsv"
+logger.info(f"Writing dropout report to {dropout_report_path}")
+dropout_report_df.to_csv(dropout_report_path, sep="\t")
+
 logger.info("=== SUMMARY ===")
 logger.info(f"Total transcripts in combined dataset: {len(combined_df)}")
 logger.info(f"Reference transcripts (with ground truth): {len(simple_class_df)}")
 logger.info(f"Complete classifications (no NaN): {len(binary_class_df)}")
-logger.info(f"Transcripts with missing classifications: {len(no_class_df)}")
+logger.info(
+    f"Transcripts excluded (any tool missing): {len(dropout_report_df)} → {dropout_report_path}"
+)
 
 log_job_completion(logger)

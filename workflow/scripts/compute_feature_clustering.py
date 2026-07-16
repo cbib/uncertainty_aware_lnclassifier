@@ -42,6 +42,7 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 from utils.entropy import load_dataset  # noqa: E402
 from utils.feature_analysis import cluster_features  # noqa: E402
 from utils.features import (  # noqa: E402
+    check_supplementary_coverage,
     filter_feature_columns,
     get_categorical_and_continuous_columns,
 )
@@ -335,19 +336,40 @@ def main():
         rg4_df = rg4_df[~rg4_df.index.duplicated(keep="first")]
         rg4_df.drop(columns=["transcript_length"], errors="ignore", inplace=True)
 
-    # ── 3. Assemble and clean feature matrix ──────────────────────────────────
+    # ── 3. Exclude transcripts absent from any supplementary pipeline ─────────
+    # Missing transcripts would be silently zeroed by reindex().fillna(0) in
+    # build_full_feature_set, biasing correlation estimates.
+    clean_index, excl_report = check_supplementary_coverage(
+        index,
+        {
+            k: v if v is not None else pd.DataFrame()
+            for k, v in {
+                "te": te_df,
+                "nbd": nbd_df,
+                "scanfold": scanfold_df,
+                "rg4": rg4_df,
+            }.items()
+        },
+    )
+    if not excl_report.empty:
+        excl_path = out_dir / "excluded_transcripts.tsv"
+        excl_report.to_csv(excl_path, sep="\t")
+        print(f"✓ Exclusion report: {excl_path} ({len(excl_report)} transcripts)")
+    index = clean_index
+
+    # ── 4. Assemble and clean feature matrix ──────────────────────────────────
     print("\n── Assembling full feature set ──")
     full = build_full_feature_set(
         features_filtered, te_df, nbd_df, index, scanfold_df, rg4_df
     )
 
-    # ── 4. Separate continuous vs categorical ─────────────────────────────────
+    # ── 5. Separate continuous vs categorical ─────────────────────────────────
     print("\n── Separating continuous / categorical ──")
     cat_cols, cont_cols = get_categorical_and_continuous_columns(full)
     continuous_df = full[cont_cols]
     categorical_df = full[cat_cols]
 
-    # ── 5. Correlation matrix ─────────────────────────────────────────────────
+    # ── 6. Correlation matrix ─────────────────────────────────────────────────
     print(
         f"\n── Computing {args.corr_method} correlation matrix "
         f"({continuous_df.shape[1]} continuous features) ──"

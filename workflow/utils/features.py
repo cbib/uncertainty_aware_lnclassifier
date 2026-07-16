@@ -292,4 +292,89 @@ def reduce_dimensions_pca(scaled_features, variance_explained=0.95, random_state
     print(f"PCA reduced features to {features_pca.shape[1]} dimensions")
     print(f"Explained variance ratio: {pca.explained_variance_ratio_.sum():.4f}")
 
+
+# ============================================================================
+# SUPPLEMENTARY PIPELINE COVERAGE CHECK
+# ============================================================================
+
+
+def check_supplementary_coverage(
+    main_index: pd.Index,
+    pipeline_dfs: dict[str, pd.DataFrame],
+) -> tuple[pd.Index, pd.DataFrame]:
+    """
+    Identify transcripts absent from any loaded supplementary feature pipeline.
+
+    When a supplementary pipeline does not cover a transcript, every feature
+    from that pipeline is silently imputed as zero (via the downstream
+    ``fillna(0)`` calls).  This biases effect-size estimates toward zero for
+    the affected transcripts' group.  Call this function *before* any join or
+    reindex so that affected transcripts can be excluded explicitly.
+
+    Parameters
+    ----------
+    main_index : pd.Index
+        Transcript IDs in the main analysis set.
+    pipeline_dfs : dict[str, pd.DataFrame]
+        Mapping of pipeline label → loaded feature DataFrame.  Pipelines with
+        an empty DataFrame (not configured / not found) are skipped.
+
+    Returns
+    -------
+    clean_index : pd.Index
+        Transcripts present in every non-empty pipeline.
+    report : pd.DataFrame
+        Indexed by seq_ID of excluded transcripts; columns:
+            missing_pipelines  – comma-separated pipeline labels
+            n_missing          – number of pipelines missing this transcript
+            reason             – human-readable summary
+        Empty DataFrame when no transcripts are excluded.
+    """
+    active = {name: df for name, df in pipeline_dfs.items() if len(df) > 0}
+    empty_report = pd.DataFrame(columns=["missing_pipelines", "n_missing", "reason"])
+    empty_report.index.name = "seq_ID"
+
+    if not active:
+        return main_index, empty_report
+
+    missing_flags: dict[str, np.ndarray] = {
+        name: ~np.isin(main_index, df.index) for name, df in active.items()
+    }
+
+    flag_matrix = np.stack(list(missing_flags.values()), axis=1)
+    any_missing = flag_matrix.any(axis=1)
+
+    if not any_missing.any():
+        return main_index, empty_report
+
+    excluded_idx = main_index[any_missing]
+    pipeline_names = list(missing_flags.keys())
+    flags_for_excluded = flag_matrix[any_missing]
+
+    missing_pipelines = [
+        ",".join(
+            pipeline_names[j]
+            for j in range(len(pipeline_names))
+            if flags_for_excluded[i, j]
+        )
+        for i in range(len(excluded_idx))
+    ]
+    report = pd.DataFrame(
+        {
+            "missing_pipelines": missing_pipelines,
+            "n_missing": flags_for_excluded.sum(axis=1),
+            "reason": [
+                f"Absent from feature pipeline(s): {mp}" for mp in missing_pipelines
+            ],
+        },
+        index=excluded_idx,
+    )
+    report.index.name = "seq_ID"
+
+    print(
+        f"⚠ Excluded {len(excluded_idx)} transcripts absent from supplementary pipelines "
+        + ", ".join(f"{n}: {v.sum()}" for n, v in missing_flags.items() if v.any())
+    )
+    return main_index[~any_missing], report
+
     return features_pca, pca
