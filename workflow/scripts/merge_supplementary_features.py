@@ -48,15 +48,9 @@ def merge_features(
         return pd.DataFrame(index=clean_index)
 
     merged = pd.concat(
-        [df.loc[df.index.isin(clean_index)] for df in active.values()],
+        [df.reindex(clean_index, fill_value=0) for df in active.values()],
         axis=1,
     )
-    merged = merged.loc[
-        clean_index
-    ]  # reindex to main order, NaN for intra-pipeline gaps
-    merged.fillna(
-        0, inplace=True
-    )  # intra-pipeline NaN only (transcript present, feature not computed)
     merged.index.name = "seq_ID"
     return merged
 
