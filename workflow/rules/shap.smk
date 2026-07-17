@@ -65,11 +65,6 @@ def _cluster_file_arg(wc):
     return f"--cluster-file '{cfile}'" if cfile else ""
 
 
-def _opt_arg(flag, path):
-    """Build optional CLI args for nullable config paths."""
-    return f"{flag} '{path}'" if path else ""
-
-
 def _max_transcripts(wc):
     """Return max_transcripts as string; 'none' if unset / null."""
     val = _mode_cfg(wc).get("max_transcripts_per_fold")
@@ -109,6 +104,7 @@ rule shap_fold:
                                         if _effective_cluster_file(wc) else []),
         consensus_file    = lambda wc: _consensus_file_input(wc),
         optimal_threshold = "results/{expt}/features/clustering/optimal_threshold.txt",
+        supplementary     = "results/{expt}/features/supplementary_features.tsv",
     output:
         rf_model  = "results/{expt}/features/shap_{mode}/fold{fold}/rf_model.joblib",
         X_test    = "results/{expt}/features/shap_{mode}/fold{fold}/X_test.csv",
@@ -124,11 +120,6 @@ rule shap_fold:
         cluster_thresh   = lambda wc, input: (
             _effective_cluster_threshold(wc) or open(input.optimal_threshold).read().strip()
         ),
-        te_rna_arg       = lambda wc: _opt_arg("--te-features-rna", _shap_cfg(wc).get("te_features_rna")),
-        te_dna_arg       = lambda wc: _opt_arg("--te-features-dna", _shap_cfg(wc).get("te_features_dna")),
-        nbd_arg          = lambda wc: _opt_arg("--nbd-features", _shap_cfg(wc).get("nbd_features")),
-        scanfold_arg     = lambda wc: _opt_arg("--scanfold-features", _shap_cfg(wc).get("scanfold_features")),
-        rg4_arg          = lambda wc: _opt_arg("--rg4-features", _shap_cfg(wc).get("rg4_features")),
         max_transcripts  = lambda wc: _max_transcripts(wc),
         background       = lambda wc: _shap_cfg(wc).get("background_sample", 500),
         random_state     = lambda wc: _shap_cfg(wc).get("random_state", 42),
@@ -149,11 +140,7 @@ rule shap_fold:
             --results-dir    results \
             --output-dir     {params.out_dir} \
             --feature-mode   {params.feature_mode} \
-            {params.te_rna_arg} \
-            {params.te_dna_arg} \
-            {params.nbd_arg} \
-            {params.scanfold_arg} \
-            {params.rg4_arg} \
+            --supplementary-features {input.supplementary} \
             --max-transcripts {params.max_transcripts} \
             --background-sample {params.background} \
             --random-state   {params.random_state} \

@@ -34,12 +34,7 @@ warnings.filterwarnings("ignore")
 # ── import project utils ─────────────────────────────────────────────────────
 sys.path.insert(0, str(Path(__file__).parents[1]))  # paper/workflow/
 from utils.entropy import load_dataset
-from utils.features import (
-    check_supplementary_coverage,
-    filter_feature_columns,
-    load_supplementary_features,
-    remove_constant_features,
-)
+from utils.features import filter_feature_columns, remove_constant_features
 from utils.parsing import simple_load_ids
 
 
@@ -89,31 +84,11 @@ def parse_args():
         "--cluster-file and implies --feature-mode filtered.",
     )
 
-    # Supplementary feature files
+    # Merged supplementary features
     p.add_argument(
-        "--te-features-rna",
-        default="",
-        help="Path to RNA/spliced TE features CSV (optional)",
-    )
-    p.add_argument(
-        "--te-features-dna",
-        default="",
-        help="Path to DNA/unspliced TE features CSV (optional)",
-    )
-    p.add_argument(
-        "--nbd-features",
-        default="",
-        help="Path to non-B-DNA features CSV (optional)",
-    )
-    p.add_argument(
-        "--scanfold-features",
-        default="",
-        help="Path to ScanFold features TSV (optional)",
-    )
-    p.add_argument(
-        "--rg4-features",
-        default="",
-        help="Path to rG4detector features CSV (optional)",
+        "--supplementary-features",
+        required=True,
+        help="Path to merged supplementary features TSV (output of merge_supplementary_features.py)",
     )
 
     # SHAP / RF parameters
@@ -172,12 +147,9 @@ def build_fold_features(
     results_dir,
     features_df,
     binary,
-    te_feats,
-    nbd_feats,
+    supplementary,
     feature_mode,
     top_feats,
-    scanfold_feats=None,
-    rg4_feats=None,
 ):
     """Load and assemble X_train / X_test / y_train / y_test for one fold."""
     base = Path(results_dir) / dataset_name
@@ -224,29 +196,12 @@ def build_fold_features(
 
     # ── join supplementary features ───────────────────────────────────────────
     print(f"[fold {fold_i}] Joining supplementary features…")
-    print(f"[fold {fold_i}]   TE features: {te_feats.shape[1]} cols")
-    print(f"[fold {fold_i}]   NBD features: {nbd_feats.shape[1]} cols")
-    scanfold_feats = scanfold_feats if scanfold_feats is not None else pd.DataFrame()
-    rg4_feats = rg4_feats if rg4_feats is not None else pd.DataFrame()
+    print(f"[fold {fold_i}]   Supplementary features: {supplementary.shape[1]} cols")
     all_feat = fold_features.copy()
-    if not te_feats.empty:
-        all_feat = all_feat.join(te_feats, how="left")
-    if not nbd_feats.empty:
-        all_feat = all_feat.join(nbd_feats, how="left", rsuffix="_nbd")
+    if not supplementary.empty:
+        all_feat = all_feat.join(supplementary, how="left", rsuffix="_supp")
         all_feat.drop(
-            columns=[c for c in all_feat.columns if c.endswith("_nbd")],
-            inplace=True,
-        )
-    if not scanfold_feats.empty:
-        all_feat = all_feat.join(scanfold_feats, how="left", rsuffix="_scanfold")
-        all_feat.drop(
-            columns=[c for c in all_feat.columns if c.endswith("_scanfold")],
-            inplace=True,
-        )
-    if not rg4_feats.empty:
-        all_feat = all_feat.join(rg4_feats, how="left", rsuffix="_rg4")
-        all_feat.drop(
-            columns=[c for c in all_feat.columns if c.endswith("_rg4")],
+            columns=[c for c in all_feat.columns if c.endswith("_supp")],
             inplace=True,
         )
     all_feat = all_feat.fillna(0)
@@ -348,51 +303,15 @@ def main():
     binary = dataset["binary"]
 
     print(f"[fold {args.fold}] Loading supplementary features…")
-    supplementary = load_supplementary_features(
-        te_rna_path=args.te_features_rna,
-        te_dna_path=args.te_features_dna,
-        nbd_path=args.nbd_features,
-        scanfold_path=args.scanfold_features,
-        rg4_path=args.rg4_features,
-    )
-    # Apply numeric-only cleanup required by the RF pipeline
-    supplementary = {k: _numeric_clean(v) for k, v in supplementary.items()}
+    supplementary = pd.read_csv(args.supplementary_features, sep="\t", index_col=0)
+    supplementary = _numeric_clean(supplementary)
 
-    # Exclude transcripts absent from any loaded supplementary pipeline before
-    # fold splitting — missing transcripts would otherwise be silently zeroed.
-    clean_index, excl_report = check_supplementary_coverage(
-        features_df.index, supplementary
-    )
-    if not excl_report.empty:
-        excl_path = out_dir / "excluded_transcripts.tsv"
-        excl_report.to_csv(excl_path, sep="\t")
-        print(
-            f"[fold {args.fold}]   Exclusion report: {excl_path} ({len(excl_report)} transcripts)"
-        )
+    # supplementary.index is already the coverage-checked clean set
+    clean_index = features_df.index.intersection(supplementary.index)
     features_df = features_df.loc[clean_index]
     binary = binary.loc[binary.index.isin(clean_index)]
-
-    # Extract individual DFs expected by build_fold_features
-    te_feats = (
-        pd.concat(
-            [
-                supplementary[k]
-                for k in ("te_rna", "te_dna")
-                if not supplementary[k].empty
-            ],
-            axis=1,
-        )
-        if any(not supplementary[k].empty for k in ("te_rna", "te_dna"))
-        else pd.DataFrame()
-    )
-    nbd_feats = supplementary["nbd"]
-    scanfold_feats = supplementary["scanfold"]
-    rg4_feats = supplementary["rg4"]
-    print(
-        f"[fold {args.fold}]   TE={te_feats.shape[1]} cols, NBD={nbd_feats.shape[1]} cols, "
-        f"ScanFold={scanfold_feats.shape[1] if not scanfold_feats.empty else 0} cols, "
-        f"rG4={rg4_feats.shape[1] if not rg4_feats.empty else 0} cols"
-    )
+    supplementary = supplementary.loc[supplementary.index.isin(clean_index)]
+    print(f"[fold {args.fold}]   Supplementary features: {supplementary.shape[1]} cols")
 
     # ── feature list: consensus JSON takes priority over cluster-file ─────────
     top_feats = None
@@ -454,12 +373,9 @@ def main():
         args.results_dir,
         features_df,
         binary,
-        te_feats,
-        nbd_feats,
+        supplementary,
         args.feature_mode,
         top_feats,
-        scanfold_feats=scanfold_feats,
-        rg4_feats=rg4_feats,
     )
     print(
         f"[fold {args.fold}] train={len(X_train)}, test={len(X_test)}, "

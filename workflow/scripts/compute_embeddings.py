@@ -9,8 +9,7 @@ Usage (from paper/):
     python -u workflow/scripts/compute_embeddings.py \
         --dataset           gencode.v47.common.cdhit.cv  \
         --output-dir        results/gencode.v47.common.cdhit.cv/embeddings \
-        --te-features       te_pipeline/results/te_analysis_flexible/features/all_transcripts_te_features.csv \
-        --nbd-features      nonb-pipeline/results/gencode.v47/extended_analysis/features_nonb_features.csv \
+        --supplementary-features results/gencode.v47.common.cdhit.cv/features/supplementary_features.tsv \
         --methods           umap,tsne,pca \
         --umap-neighbors    30 \
         --umap-min-dist     0.1 \
@@ -30,12 +29,7 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from utils.embeddings import EmbeddingPipeline
 from utils.entropy import load_dataset
-from utils.features import (
-    check_supplementary_coverage,
-    custom_feature_scaling,
-    filter_feature_columns,
-    load_supplementary_features,
-)
+from utils.features import custom_feature_scaling, filter_feature_columns
 
 # ---------------------------------------------------------------------------
 # Argument parsing
@@ -66,31 +60,11 @@ def parse_args():
         help="Where to write embedding cache, features, and labels.",
     )
 
-    # ── Optional supplementary feature files ───────────────────────────────
+    # ── Merged supplementary features ──────────────────────────────────────
     parser.add_argument(
-        "--te-features-rna",
-        default="",
-        help="Path to RNA/spliced TE features CSV.  Empty = not used.",
-    )
-    parser.add_argument(
-        "--te-features-dna",
-        default="",
-        help="Path to DNA/unspliced TE features CSV.  Empty = not used.",
-    )
-    parser.add_argument(
-        "--nbd-features",
-        default="",
-        help="Path to NBD pipeline features CSV.  Empty = not used.",
-    )
-    parser.add_argument(
-        "--scanfold-features",
-        default="",
-        help="Path to ScanFold features TSV.  Empty = not used.",
-    )
-    parser.add_argument(
-        "--rg4-features",
-        default="",
-        help="Path to rG4detector features CSV.  Empty = not used.",
+        "--supplementary-features",
+        required=True,
+        help="Path to merged supplementary features TSV (output of merge_supplementary_features.py).",
     )
 
     # ── Method selection ────────────────────────────────────────────────────
@@ -178,33 +152,18 @@ def main():
         f"raw columns: {features_df.shape[1]}"
     )
 
-    # ── 2. Load and check optional supplementary feature files ────────────
+    # ── 2. Load merged supplementary features ──────────────────────────────
     print("\n── Loading supplementary features ──")
-    supplementary = load_supplementary_features(
-        te_rna_path=args.te_features_rna or "",
-        te_dna_path=args.te_features_dna or "",
-        nbd_path=args.nbd_features or "",
-        scanfold_path=args.scanfold_features or "",
-        rg4_path=args.rg4_features or "",
-    )
+    supplementary = pd.read_csv(args.supplementary_features, sep="\t", index_col=0)
 
-    # Exclude transcripts absent from any loaded supplementary pipeline before
-    # joining — missing transcripts would otherwise receive NaN that silently
-    # becomes zero after scaling, biasing the embedding.
-    clean_index, excl_report = check_supplementary_coverage(
-        features_df.index, supplementary
-    )
-    if not excl_report.empty:
-        excl_path = output_dir / "excluded_transcripts.tsv"
-        excl_report.to_csv(excl_path, sep="\t")
-        print(f"  Exclusion report: {excl_path} ({len(excl_report)} transcripts)")
+    # supplementary.index is already the coverage-checked clean set
+    clean_index = features_df.index.intersection(supplementary.index)
     features_df = features_df.loc[clean_index]
-
-    for tag, extra_df in supplementary.items():
-        if extra_df.empty:
-            continue
-        features_df = features_df.join(extra_df, how="left", rsuffix=f"_{tag}")
-        print(f"  Columns after merging {tag}: {features_df.shape[1]}")
+    if not supplementary.empty:
+        features_df = features_df.join(
+            supplementary.loc[clean_index], how="left", rsuffix="_supp"
+        )
+        print(f"  Columns after merging supplementary features: {features_df.shape[1]}")
 
     # ── 3. Filter, select numeric columns, drop constants ─────────────────
     print(f"\n{'='*60}")

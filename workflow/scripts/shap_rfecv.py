@@ -28,8 +28,7 @@ Usage examples
 --------------
   # Basic run on all transcripts, full feature set
   python shap_rfecv.py --dataset gencode.v47.common.cdhit.cv --fold 1 \\
-      --te-features te_pipeline/.../all_transcripts_te_features.csv \\
-      --nbd-features nonb-pipeline/.../features_nonb_features.csv \\
+      --supplementary-features results/gencode.v47.common.cdhit.cv/features/supplementary_features.tsv \\
       --output-dir results/gencode.v47.common.cdhit.cv/rfecv
 
   # Start from correlation-filtered features (recommended, faster)
@@ -61,12 +60,7 @@ warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(Path(__file__).parents[1]))  # paper/workflow/
 from utils.entropy import load_dataset
-from utils.features import (
-    check_supplementary_coverage,
-    filter_feature_columns,
-    load_supplementary_features,
-    remove_constant_features,
-)
+from utils.features import filter_feature_columns, remove_constant_features
 from utils.parsing import simple_load_ids
 
 # ── RF wrapper that uses permutation importance for RFECV ranking ─────────────
@@ -148,12 +142,12 @@ def parse_args():
         help="Base results directory (default: results)",
     )
 
-    # ── supplementary features ────────────────────────────────────────────────
-    p.add_argument("--te-features-rna", default="")
-    p.add_argument("--te-features-dna", default="")
-    p.add_argument("--nbd-features", default="")
-    p.add_argument("--scanfold-features", default="")
-    p.add_argument("--rg4-features", default="")
+    # ── merged supplementary features ─────────────────────────────────────────
+    p.add_argument(
+        "--supplementary-features",
+        required=True,
+        help="Path to merged supplementary features TSV (output of merge_supplementary_features.py)",
+    )
 
     # ── feature mode & optional pre-filtering ────────────────────────────────
     p.add_argument(
@@ -274,13 +268,10 @@ def build_feature_matrix(
     results_dir,
     features_df,
     binary,
-    te_feats,
-    nbd_feats,
+    supplementary,
     feature_mode,
     cluster_file,
     cluster_threshold,
-    scanfold_feats=None,
-    rg4_feats=None,
 ):
     """Assemble **training-only** feature matrix for one fold.
 
@@ -322,27 +313,11 @@ def build_feature_matrix(
     real = fold_binary["real"].astype(int)
 
     # ── join supplementary features ───────────────────────────────────────────
-    scanfold_feats = scanfold_feats if scanfold_feats is not None else pd.DataFrame()
-    rg4_feats = rg4_feats if rg4_feats is not None else pd.DataFrame()
     all_feat = fold_features.copy()
-    if not te_feats.empty:
-        all_feat = all_feat.join(te_feats, how="left")
-    if not nbd_feats.empty:
-        all_feat = all_feat.join(nbd_feats, how="left", rsuffix="_nbd")
+    if not supplementary.empty:
+        all_feat = all_feat.join(supplementary, how="left", rsuffix="_supp")
         all_feat.drop(
-            columns=[c for c in all_feat.columns if c.endswith("_nbd")],
-            inplace=True,
-        )
-    if not scanfold_feats.empty:
-        all_feat = all_feat.join(scanfold_feats, how="left", rsuffix="_scanfold")
-        all_feat.drop(
-            columns=[c for c in all_feat.columns if c.endswith("_scanfold")],
-            inplace=True,
-        )
-    if not rg4_feats.empty:
-        all_feat = all_feat.join(rg4_feats, how="left", rsuffix="_rg4")
-        all_feat.drop(
-            columns=[c for c in all_feat.columns if c.endswith("_rg4")],
+            columns=[c for c in all_feat.columns if c.endswith("_supp")],
             inplace=True,
         )
     all_feat = all_feat.fillna(0)
@@ -517,46 +492,14 @@ def main():
     binary = dataset["binary"]
 
     print(f"[rfecv] Loading supplementary features…")
-    supplementary = load_supplementary_features(
-        te_rna_path=args.te_features_rna,
-        te_dna_path=args.te_features_dna,
-        nbd_path=args.nbd_features,
-        scanfold_path=args.scanfold_features,
-        rg4_path=args.rg4_features,
-    )
-    # Apply numeric-only cleanup required by the RF pipeline
-    supplementary = {k: _numeric_clean(v) for k, v in supplementary.items()}
+    supplementary = pd.read_csv(args.supplementary_features, sep="\t", index_col=0)
+    supplementary = _numeric_clean(supplementary)
 
-    # Exclude transcripts absent from any loaded supplementary pipeline before
-    # fold splitting — missing transcripts would otherwise be silently zeroed.
-    clean_index, excl_report = check_supplementary_coverage(
-        features_df.index, supplementary
-    )
-    if not excl_report.empty:
-        excl_path = out_dir / "excluded_transcripts.tsv"
-        excl_report.to_csv(excl_path, sep="\t")
-        print(
-            f"[rfecv]   Exclusion report: {excl_path} ({len(excl_report)} transcripts)"
-        )
+    # supplementary.index is already the coverage-checked clean set
+    clean_index = features_df.index.intersection(supplementary.index)
     features_df = features_df.loc[clean_index]
     binary = binary.loc[binary.index.isin(clean_index)]
-
-    # Extract individual DFs expected by build_feature_matrix
-    te_feats = (
-        pd.concat(
-            [
-                supplementary[k]
-                for k in ("te_rna", "te_dna")
-                if not supplementary[k].empty
-            ],
-            axis=1,
-        )
-        if any(not supplementary[k].empty for k in ("te_rna", "te_dna"))
-        else pd.DataFrame()
-    )
-    nbd_feats = supplementary["nbd"]
-    scanfold_feats = supplementary["scanfold"]
-    rg4_feats = supplementary["rg4"]
+    supplementary = supplementary.loc[supplementary.index.isin(clean_index)]
 
     print(
         f"[rfecv] Building feature matrix (fold {args.fold}, "
@@ -568,13 +511,10 @@ def main():
         args.results_dir,
         features_df,
         binary,
-        te_feats,
-        nbd_feats,
+        supplementary,
         args.feature_mode,
         args.cluster_file,
         args.cluster_threshold,
-        scanfold_feats=scanfold_feats,
-        rg4_feats=rg4_feats,
     )
     print(
         f"[rfecv] Matrix shape: {X.shape}  " f"(class balance: {y.mean():.2%} coding)"

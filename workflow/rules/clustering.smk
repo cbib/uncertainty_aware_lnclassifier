@@ -38,16 +38,6 @@ def _clust_sub(wc):
     return config["feature_analysis"][wc.expt].get("clustering", {})
 
 
-def _opt_path(path):
-    """Return [] for null/empty paths so Snakemake does not treat them as required inputs."""
-    return [path] if path else []
-
-
-def _opt_arg(flag, path):
-    """Build optional CLI args for nullable config paths."""
-    return f"{flag} '{path}'" if path else ""
-
-
 # ── Aggregate targets ──────────────────────────────────────────────────────────
 
 _clustering_all_targets = [
@@ -74,13 +64,9 @@ rule feature_clustering:
       - feature_cluster_membership.csv      : feature → cluster_id + representative at optimal threshold
     """
     input:
-        full_table  = "results/{expt}/tables/{expt}_full_table.tsv",
-        binary      = "results/{expt}/tables/{expt}_binary_class_table.tsv",
-        te_rna      = lambda wc: _opt_path(_clust_cfg(wc).get("te_features_rna")),
-        te_dna      = lambda wc: _opt_path(_clust_cfg(wc).get("te_features_dna")),
-        nbd         = lambda wc: _opt_path(_clust_cfg(wc).get("nbd_features")),
-        scanfold    = lambda wc: _opt_path(_clust_cfg(wc).get("scanfold_features")),
-        rg4         = lambda wc: _opt_path(_clust_cfg(wc).get("rg4_features")),
+        full_table    = "results/{expt}/tables/{expt}_full_table.tsv",
+        binary        = "results/{expt}/tables/{expt}_binary_class_table.tsv",
+        supplementary = "results/{expt}/features/supplementary_features.tsv",
     output:
         corr_matrix       = "results/{expt}/features/clustering/feature_correlation_matrix.csv",
         dendrogram        = "results/{expt}/features/clustering/feature_correlation_dendrogram.pdf",
@@ -92,11 +78,6 @@ rule feature_clustering:
     params:
         output_dir   = lambda wc: f"results/{wc.expt}/features/clustering",
         nbd_features = lambda wc: _clust_cfg(wc)["nbd_features"],
-        te_rna_arg   = lambda wc: _opt_arg("--te-features-rna", _clust_cfg(wc).get("te_features_rna")),
-        te_dna_arg   = lambda wc: _opt_arg("--te-features-dna", _clust_cfg(wc).get("te_features_dna")),
-        nbd_arg      = lambda wc: _opt_arg("--nbd-features", _clust_cfg(wc).get("nbd_features")),
-        scanfold_arg = lambda wc: _opt_arg("--scanfold-features", _clust_cfg(wc).get("scanfold_features")),
-        rg4_arg      = lambda wc: _opt_arg("--rg4-features", _clust_cfg(wc).get("rg4_features")),
         corr_method  = lambda wc: _clust_sub(wc).get("corr_method", "spearman"),
         distance_min  = lambda wc: _clust_sub(wc).get("distance_min", 0.05),
         distance_max  = lambda wc: _clust_sub(wc).get("distance_max", 1.60),
@@ -112,14 +93,10 @@ rule feature_clustering:
     shell:
         """
         python -u workflow/scripts/compute_feature_clustering.py  \
-            --dataset             {wildcards.expt}                  \
-            --output-dir          {params.output_dir}               \
-            {params.te_rna_arg}                                   \
-            {params.te_dna_arg}                                   \
-            {params.nbd_arg}                                      \
-            {params.scanfold_arg}                                 \
-            {params.rg4_arg}                                      \
-            --corr-method         {params.corr_method}              \
+            --dataset               {wildcards.expt}                \
+            --output-dir            {params.output_dir}             \
+            --supplementary-features {input.supplementary}          \
+            --corr-method           {params.corr_method}             \
             --distance-min        {params.distance_min}             \
             --distance-max        {params.distance_max}             \
             --distance-step       {params.distance_step}            \

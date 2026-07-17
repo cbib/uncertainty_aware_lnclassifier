@@ -27,10 +27,8 @@ import warnings
 
 from utils.entropy import load_dataset, load_entropy_groups, split_entropy_group_indices
 from utils.features import (
-    check_supplementary_coverage,
     filter_feature_columns,
     get_categorical_and_continuous_columns,
-    load_supplementary_features,
     remove_constant_features,
 )
 from utils.stats import compute_pairwise_stats
@@ -44,21 +42,9 @@ def setup_logging(verbose=True):
         print("✓ Imports successful", file=sys.stderr)
 
 
-def prepare_features(
-    features,
-    te_features,
-    nbd_features,
-    scanfold_features=None,
-    rg4_features=None,
-    verbose=True,
-):
+def prepare_features(features, supplementary, verbose=True):
     """Combine and preprocess all feature sets."""
-    extra = [
-        df
-        for df in [scanfold_features, rg4_features]
-        if df is not None and not df.empty
-    ]
-    combined = pd.concat([features, te_features, nbd_features, *extra], axis=1)
+    combined = pd.concat([features, supplementary], axis=1)
     combined = combined.loc[:, ~combined.columns.duplicated(keep="first")]
     combined.fillna(0, inplace=True)
     combined = combined.apply(pd.to_numeric, errors="coerce")
@@ -297,29 +283,9 @@ def parse_arguments():
         help="Path to persisted entropy groups TSV (output of compute_entropy_groups.py)",
     )
     parser.add_argument(
-        "--te-features-rna",
-        default="",
-        help="Path to RNA/spliced TE features CSV (optional)",
-    )
-    parser.add_argument(
-        "--te-features-dna",
-        default="",
-        help="Path to DNA/unspliced TE features CSV (optional)",
-    )
-    parser.add_argument(
-        "--nbd-features",
-        default="",
-        help="Path to NBD features (optional)",
-    )
-    parser.add_argument(
-        "--scanfold-features",
-        default="",
-        help="Path to ScanFold features (optional)",
-    )
-    parser.add_argument(
-        "--rg4-features",
-        default="",
-        help="Path to rg4detector features (optional)",
+        "--supplementary-features",
+        required=True,
+        help="Path to merged supplementary features TSV (output of merge_supplementary_features.py)",
     )
     parser.add_argument(
         "--cluster-file",
@@ -367,41 +333,16 @@ def main():
     features_to_keep = filter_feature_columns(features)
     features = features[features_to_keep]
 
-    # Load supplementary pipeline features with per-pipeline index/column cleaning
+    # Load pre-merged, pre-cleaned supplementary pipeline features
     print("Loading supplementary features…", file=sys.stderr)
-    supplementary = load_supplementary_features(
-        te_rna_path=args.te_features_rna or "",
-        te_dna_path=args.te_features_dna or "",
-        nbd_path=args.nbd_features or "",
-        scanfold_path=args.scanfold_features or "",
-        rg4_path=args.rg4_features or "",
-    )
+    supplementary = pd.read_csv(args.supplementary_features, sep="\t", index_col=0)
 
-    # Exclude transcripts absent from any loaded supplementary pipeline.
-    # Keeping them would silently zero all their pipeline features (fillna(0)),
-    # biasing effect-size estimates toward zero for their group.
-    clean_index, exclusion_report = check_supplementary_coverage(
-        features.index, supplementary
-    )
-    if not exclusion_report.empty:
-        excl_path = Path(args.output_dir) / "excluded_transcripts.tsv"
-        exclusion_report.to_csv(excl_path, sep="\t")
-        print(
-            f"✓ Exclusion report: {excl_path} ({len(exclusion_report)} transcripts)",
-            file=sys.stderr,
-        )
+    # supplementary.index is already the coverage-checked clean set
+    clean_index = features.index.intersection(supplementary.index)
     features = features.loc[clean_index]
     probs = probs.loc[clean_index]
     labels = labels.loc[clean_index]
-
-    # Apply intra-pipeline NaN imputation (transcript present but feature not computed)
-    te_rna = supplementary["te_rna"].fillna(0)
-    te_dna = supplementary["te_dna"].fillna(0)
-    te_parts = [df for df in [te_rna, te_dna] if not df.empty]
-    te_features = pd.concat(te_parts, axis=1) if te_parts else pd.DataFrame()
-    nbd_features = supplementary["nbd"].fillna(0)
-    scanfold_features = supplementary["scanfold"].fillna(0)
-    rg4_features = supplementary["rg4"].fillna(0)
+    supplementary = supplementary.loc[clean_index]
 
     # Load entropy metrics
     entropy_df = pd.read_csv(args.entropy_tsv, sep="\t", index_col=0)
@@ -421,10 +362,7 @@ def main():
     print("Preparing features...", file=sys.stderr)
     categorical_features, scalar_features = prepare_features(
         features,
-        te_features,
-        nbd_features,
-        scanfold_features=scanfold_features,
-        rg4_features=rg4_features,
+        supplementary,
         verbose=args.verbose,
     )
 

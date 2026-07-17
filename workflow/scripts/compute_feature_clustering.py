@@ -18,8 +18,7 @@ Usage:
     python compute_feature_clustering.py \\
         --dataset gencode.v47.common.cdhit.cv   \\
         --output-dir results/gencode.v47.common.cdhit.cv/clustering \\
-        --te-features  te_pipeline/results/.../all_transcripts_te_features.csv \\
-        --nbd-features nonb-pipeline/results/.../features_nonb_features.csv
+        --supplementary-features results/gencode.v47.common.cdhit.cv/features/supplementary_features.tsv
 """
 
 import argparse
@@ -42,10 +41,8 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 from utils.entropy import load_dataset  # noqa: E402
 from utils.feature_analysis import cluster_features  # noqa: E402
 from utils.features import (  # noqa: E402
-    check_supplementary_coverage,
     filter_feature_columns,
     get_categorical_and_continuous_columns,
-    load_supplementary_features,
 )
 from utils.plotting import color_feature_ticklabels, feature_label  # noqa: E402
 
@@ -69,34 +66,10 @@ def parse_args():
         help="Directory where the three output files will be written.",
     )
     p.add_argument(
-        "--te-features-rna",
-        default=None,
-        metavar="CSV",
-        help="Path to RNA/spliced TE feature CSV (optional).",
-    )
-    p.add_argument(
-        "--te-features-dna",
-        default=None,
-        metavar="CSV",
-        help="Path to DNA/unspliced TE feature CSV (optional).",
-    )
-    p.add_argument(
-        "--nbd-features",
-        default=None,
-        metavar="CSV",
-        help="Path to Non-B DNA feature CSV (optional; skip if not available).",
-    )
-    p.add_argument(
-        "--scanfold-features",
-        default=None,
+        "--supplementary-features",
+        required=True,
         metavar="TSV",
-        help="Path to ScanFold feature TSV (optional).",
-    )
-    p.add_argument(
-        "--rg4-features",
-        default=None,
-        metavar="CSV",
-        help="Path to rG4detector feature CSV (optional).",
+        help="Path to merged supplementary features TSV (output of merge_supplementary_features.py).",
     )
     p.add_argument(
         "--distance-min",
@@ -149,43 +122,28 @@ def parse_args():
 
 def build_full_feature_set(
     features: pd.DataFrame,
-    te_df: pd.DataFrame | None,
-    nbd_df: pd.DataFrame | None,
+    supplementary: pd.DataFrame,
     index: pd.Index,
-    scanfold_df: pd.DataFrame | None = None,
-    rg4_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """
-    Concatenate main features with TE, NBD, ScanFold, and rG4 supplementary features.
+    Concatenate main features with the merged supplementary features.
 
     Steps:
-        1. Reindex all DataFrames to the common transcript index.
+        1. Reindex both DataFrames to the common transcript index.
         2. Concatenate along columns.
         3. Drop duplicated column names (keep first occurrence).
         4. Fill NaNs with 0 (expected for absent feature indicators).
         5. Convert everything to numeric (bool/object → 0/1).
         6. Drop constant columns (nunique ≤ 1).
     """
-    parts = [features.loc[index]]
-    if te_df is not None:
-        te_aligned = te_df.reindex(index).fillna(0)
-        parts.append(te_aligned)
-    if nbd_df is not None:
-        nbd_aligned = nbd_df.reindex(index).fillna(0)
-        # Align with notebook rename
-        if "motif_types_present" in nbd_aligned.columns:
-            nbd_aligned = nbd_aligned.rename(
-                columns={"motif_types_present": "n_motif_types"}
-            )
-        parts.append(nbd_aligned)
-    if scanfold_df is not None:
-        scanfold_aligned = scanfold_df.reindex(index).fillna(0)
-        parts.append(scanfold_aligned)
-    if rg4_df is not None:
-        rg4_aligned = rg4_df.reindex(index).fillna(0)
-        parts.append(rg4_aligned)
+    supplementary_aligned = supplementary.reindex(index).fillna(0)
+    # Align with notebook rename
+    if "motif_types_present" in supplementary_aligned.columns:
+        supplementary_aligned = supplementary_aligned.rename(
+            columns={"motif_types_present": "n_motif_types"}
+        )
 
-    full = pd.concat(parts, axis=1)
+    full = pd.concat([features.loc[index], supplementary_aligned], axis=1)
     full = full.loc[:, ~full.columns.duplicated(keep="first")]
     full.fillna(0, inplace=True)
     full = full.apply(pd.to_numeric, errors="coerce")
@@ -291,42 +249,14 @@ def main():
     print(f"  Transcripts : {len(index):,}")
     print(f"  Core features: {features_filtered.shape[1]}")
 
-    # ── 2. Load supplementary features ────────────────────────────────────────
+    # ── 2. Load merged supplementary features ─────────────────────────────────
     print("\n── Loading supplementary features ──")
-    supplementary = load_supplementary_features(
-        te_rna_path=args.te_features_rna or "",
-        te_dna_path=args.te_features_dna or "",
-        nbd_path=args.nbd_features or "",
-        scanfold_path=args.scanfold_features or "",
-        rg4_path=args.rg4_features or "",
-    )
+    supplementary = pd.read_csv(args.supplementary_features, sep="\t", index_col=0)
+    index = index.intersection(supplementary.index)
 
-    # ── 3. Exclude transcripts absent from any supplementary pipeline ─────────
-    # Missing transcripts would be silently zeroed by reindex().fillna(0) in
-    # build_full_feature_set, biasing correlation estimates.
-    clean_index, excl_report = check_supplementary_coverage(index, supplementary)
-    if not excl_report.empty:
-        excl_path = out_dir / "excluded_transcripts.tsv"
-        excl_report.to_csv(excl_path, sep="\t")
-        print(f"✓ Exclusion report: {excl_path} ({len(excl_report)} transcripts)")
-    index = clean_index
-
-    # Extract individual DFs for build_full_feature_set (None = disabled)
-    te_parts = [
-        supplementary[k] for k in ("te_rna", "te_dna") if not supplementary[k].empty
-    ]
-    te_df = pd.concat(te_parts, axis=1) if te_parts else None
-    nbd_df = supplementary["nbd"] if not supplementary["nbd"].empty else None
-    scanfold_df = (
-        supplementary["scanfold"] if not supplementary["scanfold"].empty else None
-    )
-    rg4_df = supplementary["rg4"] if not supplementary["rg4"].empty else None
-
-    # ── 4. Assemble and clean feature matrix ──────────────────────────────────
+    # ── 3. Assemble and clean feature matrix ──────────────────────────────────
     print("\n── Assembling full feature set ──")
-    full = build_full_feature_set(
-        features_filtered, te_df, nbd_df, index, scanfold_df, rg4_df
-    )
+    full = build_full_feature_set(features_filtered, supplementary, index)
 
     # ── 5. Separate continuous vs categorical ─────────────────────────────────
     print("\n── Separating continuous / categorical ──")

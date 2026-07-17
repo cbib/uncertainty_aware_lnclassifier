@@ -58,6 +58,7 @@ configfile: "config/shap_config.yaml"
 # so those must NOT be included separately here — doing so would produce
 # duplicate rule definitions.
 # univariate.smk is DEPRECATED — do not re-add it here.
+include: "supplementary.smk"          # → merge_supplementary_features (upstream of all below)
 include: "statistical_analysis.smk"   # → entropy + clustering + statistical_tests
 include: "embeddings.smk"
 include: "shap.smk"
