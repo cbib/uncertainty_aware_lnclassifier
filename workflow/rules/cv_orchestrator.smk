@@ -434,3 +434,21 @@ rule cv_training_orchestrator:
         echo "CV training complete for {wildcards.expt}" > {log}
         touch {output}
         """
+
+
+def get_all_cv_training_done(wildcards):
+    cv_expts = [k for k in config["experiments"] if k.endswith(".cv")]
+    return expand("results/{expt}/training/cv_training.done", expt=cv_expts)
+
+
+rule cv_final_report:
+    input:
+        get_all_cv_training_done
+    output:
+        "results/cv_orchestrator/final_report.txt"
+    shell:
+        """
+        mkdir -p results/cv_orchestrator
+        echo "CV training complete:" > {output}
+        for f in {input}; do echo "  $f" >> {output}; done
+        """

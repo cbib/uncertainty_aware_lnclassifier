@@ -298,84 +298,127 @@ def reduce_dimensions_pca(scaled_features, variance_explained=0.95, random_state
 # ============================================================================
 
 
-def check_supplementary_coverage(
+TRACE_COLS = ["category", "pipeline", "detail"]
+
+
+def _trace_rows(
+    idx: pd.Index, category: str, pipeline: str, detail: str
+) -> pd.DataFrame:
+    """One long-format traceability block: rows in `idx`, all sharing category/pipeline/detail."""
+    return pd.DataFrame(
+        {"category": category, "pipeline": pipeline, "detail": detail},
+        index=pd.Index(idx, name="seq_ID"),
+    )
+
+
+def build_supplementary_traceability(
     main_index: pd.Index,
     pipeline_dfs: dict[str, pd.DataFrame],
 ) -> tuple[pd.Index, pd.DataFrame]:
     """
-    Identify transcripts absent from any loaded supplementary feature pipeline.
+    Build a full data-traceability report for the supplementary feature merge.
 
-    When a supplementary pipeline does not cover a transcript, every feature
-    from that pipeline is silently imputed as zero (via the downstream
-    ``fillna(0)`` calls).  This biases effect-size estimates toward zero for
-    the affected transcripts' group.  Call this function *before* any join or
-    reindex so that affected transcripts can be excluded explicitly.
+    Every transcript that is *not* carried into the clean merged matrix is
+    recorded with an explicit reason, so nothing is silently dropped or
+    zero-imputed.  Three categories are distinguished:
+
+    ``missing_from_pipeline``
+        A main-index transcript is absent from an active pipeline.  Zero-imputing
+        its features (the old downstream ``fillna(0)`` behaviour) biases effect
+        sizes toward zero, so it is excluded from the clean set instead.
+    ``not_in_main_index``
+        A pipeline supplies a transcript that is absent from the main analysis
+        set.  Informational — it was never eligible and is dropped from the merge.
+    ``invalid_data``
+        A main-index transcript is present in a pipeline but carries missing or
+        non-numeric feature values; it is excluded rather than coerced to zero.
 
     Parameters
     ----------
     main_index : pd.Index
         Transcript IDs in the main analysis set.
     pipeline_dfs : dict[str, pd.DataFrame]
-        Mapping of pipeline label → loaded feature DataFrame.  Pipelines with
-        an empty DataFrame (not configured / not found) are skipped.
+        Mapping of pipeline label → loaded feature DataFrame.  Empty DataFrames
+        (not configured / not found) are skipped.
 
     Returns
     -------
     clean_index : pd.Index
-        Transcripts present in every non-empty pipeline.
+        Main transcripts present with valid data in every active pipeline.
     report : pd.DataFrame
-        Indexed by seq_ID of excluded transcripts; columns:
-            missing_pipelines  – comma-separated pipeline labels
-            n_missing          – number of pipelines missing this transcript
-            reason             – human-readable summary
-        Empty DataFrame when no transcripts are excluded.
+        Long-format, one row per (transcript, issue); indexed by seq_ID with
+        columns ``category``, ``pipeline``, ``detail``.  Empty (with those
+        columns) when nothing is dropped.
     """
     active = {name: df for name, df in pipeline_dfs.items() if len(df) > 0}
-    empty_report = pd.DataFrame(columns=["missing_pipelines", "n_missing", "reason"])
+    empty_report = pd.DataFrame(columns=TRACE_COLS)
     empty_report.index.name = "seq_ID"
 
     if not active:
         return main_index, empty_report
 
-    missing_flags: dict[str, np.ndarray] = {
-        name: ~np.isin(main_index, df.index) for name, df in active.items()
-    }
+    parts: list[pd.DataFrame] = []
+    excluded_main = main_index[:0]  # empty, same dtype — main transcripts to drop
 
-    flag_matrix = np.stack(list(missing_flags.values()), axis=1)
-    any_missing = flag_matrix.any(axis=1)
+    for name, df in active.items():
+        # pd.Index.isin is hash-based (ms); np.isin on string arrays falls back to a
+        # sort-based path costing >90s per call — keep isin on the hot path.
 
-    if not any_missing.any():
-        return main_index, empty_report
+        # (1) main transcripts absent from this pipeline
+        missing = main_index[~main_index.isin(df.index)]
+        if len(missing):
+            parts.append(
+                _trace_rows(
+                    missing,
+                    "missing_from_pipeline",
+                    name,
+                    f"Absent from pipeline '{name}'",
+                )
+            )
+            excluded_main = excluded_main.union(missing)
 
-    excluded_idx = main_index[any_missing]
-    pipeline_names = list(missing_flags.keys())
-    flags_for_excluded = flag_matrix[any_missing]
+        # (2) pipeline transcripts absent from the main index (never eligible)
+        extra = pd.Index(df.index[~df.index.isin(main_index)]).unique()
+        if len(extra):
+            parts.append(
+                _trace_rows(
+                    extra,
+                    "not_in_main_index",
+                    name,
+                    f"Present in pipeline '{name}' but absent from main index",
+                )
+            )
 
-    missing_pipelines = [
-        ",".join(
-            pipeline_names[j]
-            for j in range(len(pipeline_names))
-            if flags_for_excluded[i, j]
-        )
-        for i in range(len(excluded_idx))
-    ]
-    report = pd.DataFrame(
-        {
-            "missing_pipelines": missing_pipelines,
-            "n_missing": flags_for_excluded.sum(axis=1),
-            "reason": [
-                f"Absent from feature pipeline(s): {mp}" for mp in missing_pipelines
-            ],
-        },
-        index=excluded_idx,
-    )
-    report.index.name = "seq_ID"
+        # (3) main transcripts present here but with missing/non-numeric values
+        present = df.index.intersection(main_index)
+        # ponytail: feature matrices are numeric; to_numeric(coerce)+isna catches both
+        # NaN and stray non-numeric strings. If a column is ever legitimately categorical
+        # this over-flags — narrow to that column's dtype then.
+        numeric = df.loc[present].apply(pd.to_numeric, errors="coerce")
+        bad = present[numeric.isna().any(axis=1).to_numpy()]
+        if len(bad):
+            parts.append(
+                _trace_rows(
+                    bad,
+                    "invalid_data",
+                    name,
+                    f"Missing/non-numeric feature value(s) in pipeline '{name}'",
+                )
+            )
+            excluded_main = excluded_main.union(pd.Index(bad))
 
+    clean_index = main_index[~main_index.isin(excluded_main)]
+
+    if not parts:
+        return clean_index, empty_report
+
+    report = pd.concat(parts)
+    counts = report.groupby("category").size().to_dict()
     print(
-        f"⚠ Excluded {len(excluded_idx)} transcripts absent from supplementary pipelines "
-        + ", ".join(f"{n}: {v.sum()}" for n, v in missing_flags.items() if v.any())
+        f"⚠ Traceability: {len(clean_index):,}/{len(main_index):,} main transcripts kept; "
+        + ", ".join(f"{k}={v}" for k, v in counts.items())
     )
-    return main_index[~any_missing], report
+    return clean_index, report
 
 
 # ============================================================================
@@ -431,7 +474,7 @@ def load_supplementary_features(
     dict[str, pd.DataFrame]
         Keys: ``te_rna``, ``te_dna``, ``nbd``, ``scanfold``, ``rg4``.
         Empty DataFrame for any disabled or missing pipeline.
-        Suitable for direct use with :func:`check_supplementary_coverage`.
+        Suitable for direct use with :func:`build_supplementary_traceability`.
 
     Per-pipeline transformations
     ----------------------------

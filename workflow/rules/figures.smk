@@ -3,6 +3,9 @@ configfile: "config/feature_analysis_config.yaml"
 configfile: "config/shap_config.yaml"
 configfile: "config/figures_config.yaml"
 
+# ── Module includes ───────────────────────────────────────────────────────────
+include: "feature_analysis.smk"  # already includes statistical_analysis.smk, embeddings.smk, shap.smk
+
 # ── Dataset constants ─────────────────────────────────────────────────────────
 _FIG_NFOLDS = 5
 
