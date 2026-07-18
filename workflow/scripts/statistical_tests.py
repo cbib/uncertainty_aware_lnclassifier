@@ -47,6 +47,90 @@ def setup_logging(verbose=True):
         print("✓ Imports successful", file=sys.stderr)
 
 
+def build_pipeline_exclusion_report(
+    main_index: pd.Index,
+    pipeline_dfs: dict[str, pd.DataFrame],
+) -> tuple[pd.Index, pd.DataFrame]:
+    """
+    Identify transcripts absent from one or more supplementary feature pipelines
+    and return a cleaned index plus a per-transcript exclusion report.
+
+    A transcript missing from any pipeline would silently receive zeros for all
+    of that pipeline's features.  This function makes the exclusion explicit so
+    the transcript is dropped upstream of any statistical test.
+
+    Parameters
+    ----------
+    main_index : pd.Index
+        Transcript IDs in the main analysis set.
+    pipeline_dfs : dict[str, pd.DataFrame]
+        Mapping of pipeline label → loaded feature DataFrame (may be empty).
+        Empty DataFrames are skipped (pipeline was not configured).
+
+    Returns
+    -------
+    clean_index : pd.Index
+        Transcripts present in all non-empty pipelines.
+    report : pd.DataFrame
+        Index = seq_ID of excluded transcripts; columns:
+            missing_pipelines  – comma-separated pipeline labels
+            n_missing          – count
+            reason             – human-readable summary
+    """
+    active = {name: df for name, df in pipeline_dfs.items() if len(df) > 0}
+    if not active:
+        return main_index, pd.DataFrame(
+            columns=["missing_pipelines", "n_missing", "reason"]
+        )
+
+    missing_flags: dict[str, np.ndarray] = {}
+    for name, df in active.items():
+        missing_flags[name] = ~np.isin(main_index, df.index)
+
+    flag_matrix = np.stack(
+        list(missing_flags.values()), axis=1
+    )  # (n_transcripts, n_pipelines)
+    any_missing = flag_matrix.any(axis=1)
+
+    excluded_idx = main_index[any_missing]
+    if len(excluded_idx) == 0:
+        return main_index, pd.DataFrame(
+            columns=["missing_pipelines", "n_missing", "reason"]
+        )
+
+    pipeline_names = list(missing_flags.keys())
+    flags_for_excluded = flag_matrix[any_missing]
+
+    missing_pipelines = [
+        ",".join(
+            pipeline_names[j]
+            for j in range(len(pipeline_names))
+            if flags_for_excluded[i, j]
+        )
+        for i in range(len(excluded_idx))
+    ]
+    n_missing = flags_for_excluded.sum(axis=1)
+    reason = [f"Absent from feature pipeline(s): {mp}" for mp in missing_pipelines]
+
+    report = pd.DataFrame(
+        {
+            "missing_pipelines": missing_pipelines,
+            "n_missing": n_missing,
+            "reason": reason,
+        },
+        index=excluded_idx,
+    )
+    report.index.name = "seq_ID"
+
+    clean_index = main_index[~any_missing]
+    print(
+        f"⚠ Excluded {len(excluded_idx)} transcripts missing from supplementary pipelines "
+        f"({', '.join(f'{n}: {v.sum()}' for n, v in missing_flags.items() if v.any())})",
+        file=sys.stderr,
+    )
+    return clean_index, report
+
+
 def prepare_features(
     features,
     te_features,
@@ -63,6 +147,9 @@ def prepare_features(
     ]
     combined = pd.concat([features, te_features, nbd_features, *extra], axis=1)
     combined = combined.loc[:, ~combined.columns.duplicated(keep="first")]
+    # ponytail: fillna(0) kept only for intra-pipeline NaN (e.g. a feature that could
+    # not be computed for a present transcript); cross-pipeline absence is handled
+    # upstream by build_pipeline_exclusion_report before this function is called.
     combined.fillna(0, inplace=True)
     combined = combined.apply(pd.to_numeric, errors="coerce")
 
@@ -404,6 +491,31 @@ def main():
         df.empty for df in [te_features, nbd_features, scanfold_features, rg4_features]
     ):
         print("⚠ Some feature sets not loaded", file=sys.stderr)
+
+    # Exclude transcripts absent from any loaded supplementary pipeline.
+    # Keeping them would silently zero all their pipeline features (fillna(0)),
+    # which biases effect-size estimates toward zero for their group.
+    supplementary_pipelines = {
+        "te_pipeline_rna": te_rna,
+        "te_pipeline_dna": te_dna,
+        "nbd_pipeline": nbd_features,
+        "scanfold": scanfold_features,
+        "rg4": rg4_features,
+    }
+    clean_index, exclusion_report = build_pipeline_exclusion_report(
+        features.index, supplementary_pipelines
+    )
+    if not exclusion_report.empty:
+        exclusion_report_path = Path(args.output_dir) / "excluded_transcripts.tsv"
+        exclusion_report.to_csv(exclusion_report_path, sep="\t")
+        print(
+            f"✓ Exclusion report saved: {exclusion_report_path} "
+            f"({len(exclusion_report)} transcripts)",
+            file=sys.stderr,
+        )
+    features = features.loc[clean_index]
+    probs = probs.loc[clean_index]
+    labels = labels.loc[clean_index]
 
     # Load entropy metrics
     entropy_df = pd.read_csv(args.entropy_tsv, sep="\t", index_col=0)

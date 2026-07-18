@@ -18,8 +18,11 @@ shap:
     force_rerun: false             # set true to ignore cached rf_model.joblib / shap_values.csv
 
     # Supplementary feature files (relative to paper/ working directory)
-    te_features:  "te_pipeline/results/te_analysis_flexible/features/all_transcripts_te_features.corrected.csv"
+    te_features_rna:  "te_pipeline/results/gencode.v47/features/all_transcripts_te_features.csv"
+    te_features_dna:  "te_pipeline/results/gencode.v47.bis_unspliced/features/all_transcripts_te_features.csv"
     nbd_features: "nonb-pipeline/results/gencode.v47/extended_analysis/features_nonb_features.csv"
+    scanfold_features: "secondrna/results/gencode.v47/scanfold_final_partners_stats.tsv"
+    rg4_features:      "secondrna/results/gencode.v47/rg4detector/peak_counts.csv"
 
     # Correlation-filtering artefact (used by 'filtered' feature mode)
     cluster_file:      "results/gencode.v47.common.cdhit.cv/features/clustering/feature_clusters_at_distances.csv"
@@ -52,7 +55,8 @@ shap:
     force_rerun: true             # set true to ignore cached rf_model.joblib / shap_values.csv
 
     # Supplementary feature files (relative to paper/ working directory)
-    te_features:  "te_pipeline/results/te_analysis_flexible/features/all_transcripts_te_features.corrected.csv"
+    te_features_rna:  "te_pipeline/results/gencode.v47/features/all_transcripts_te_features.csv"
+    te_features_dna:  "te_pipeline/results/gencode.v47.bis_unspliced/features/all_transcripts_te_features.csv"
     nbd_features:  "nonb-pipeline/results/gencode.v47.transcripts/extended_analysis/features_nonb_features.csv"
 
     # Correlation-filtering artefact (used by 'filtered' feature mode)
@@ -85,7 +89,8 @@ shap:
     force_rerun: false             # set true to ignore cached rf_model.joblib / shap_values.csv
 
     # Supplementary feature files (relative to paper/ working directory)
-    te_features:  "te_pipeline/results/te_analysis_flexible/features/all_transcripts_te_features.corrected.csv"
+    te_features_rna:  "te_pipeline/results/gencode.v47/features/all_transcripts_te_features.csv"
+    te_features_dna:  "te_pipeline/results/gencode.v47.bis_unspliced/features/all_transcripts_te_features.csv"
     nbd_features: null             # excluded for no-NBD analysis
 
     # Correlation-filtering artefact (used by 'filtered' feature mode)
