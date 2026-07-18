@@ -445,21 +445,26 @@ def create_binary_classification_table(simple_class_df: pd.DataFrame) -> pd.Data
 
 def create_dropout_report(simple_class_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Report which transcripts were excluded from the binary classification table
-    and which tool(s) caused the exclusion (missing output → NaN label column).
+    Build a per-transcript report explaining why each transcript was excluded
+    from the binary classification table.
+
+    A transcript is excluded when at least one tool produced no output for it
+    (NaN label column).  The report names those tools so the cause is
+    traceable without re-running the pipeline.
 
     Parameters
     ----------
     simple_class_df : pd.DataFrame
         Output of create_simple_classification_table() — index = seq_ID,
-        columns include ``label_<tool>`` and ``biotype``.
+        columns include label_<tool> and biotype.
 
     Returns
     -------
-    pd.DataFrame indexed by seq_ID with columns:
-        biotype        – transcript biotype
-        missing_tools  – comma-separated tool names that produced no output
-        n_missing      – number of missing tools
+    pd.DataFrame with columns:
+        seq_ID         (index)
+        biotype
+        missing_tools  – comma-separated tool names that had no output
+        n_missing      – how many tools were missing
         reason         – human-readable summary
     """
     label_cols = [c for c in simple_class_df.columns if c.startswith("label_")]
@@ -473,20 +478,21 @@ def create_dropout_report(simple_class_df: pd.DataFrame) -> pd.DataFrame:
     missing_tools = nan_flags.apply(
         lambda row: ",".join(t for t, v in zip(tool_names, row) if v), axis=1
     )
+    n_missing = nan_flags.sum(axis=1)
+
     report = pd.DataFrame(
         {
             "biotype": dropped.get("biotype", pd.Series(dtype=str)),
             "missing_tools": missing_tools,
-            "n_missing": nan_flags.sum(axis=1),
-            "reason": missing_tools.apply(lambda t: f"No output from: {t}"),
+            "n_missing": n_missing,
+            "reason": missing_tools.apply(lambda tools: f"No output from: {tools}"),
         },
         index=dropped.index,
     )
     report.index.name = "seq_ID"
-    missing_tool_names = [t for t in tool_names if nan_flags[t].any()]
     logger.info(
         f"  Dropout report: {len(report)} transcripts excluded "
-        f"(tools with missing output: {', '.join(missing_tool_names)})"
+        f"(tools: {', '.join(t for t in tool_names if nan_flags[t].any())})"
     )
     return report
 

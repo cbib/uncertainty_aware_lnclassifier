@@ -199,7 +199,7 @@ binary_class_path = f"{output_prefix}_binary_class_table.tsv"
 logger.info(f"Writing binary classification table to {binary_class_path}")
 binary_class_df.to_csv(binary_class_path, sep="\t")
 
-# Report which transcripts were excluded and which tool(s) caused each exclusion
+# Report transcripts excluded due to missing tool output
 dropout_report_df = create_dropout_report(simple_class_df)
 dropout_report_path = f"{output_prefix}_dropout_report.tsv"
 logger.info(f"Writing dropout report to {dropout_report_path}")

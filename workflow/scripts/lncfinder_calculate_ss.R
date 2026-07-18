@@ -1,4 +1,4 @@
-source("../utils/ss_utils.R")  # Load read_ss_cache function
+source(file.path(snakemake@scriptdir, "../utils/ss_utils.R"))
 
 if (!requireNamespace("LncFinder", quietly = TRUE)) {
     install.packages("LncFinder", repos = "https://cloud.r-project.org/")

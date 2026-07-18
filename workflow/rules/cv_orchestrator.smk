@@ -28,7 +28,10 @@ DEFAULT_N_FOLDS = 1
 
 rule all_cv:
     input:
-        "results/cv_orchestrator/final_report.txt"
+        expand(
+            "results/{expt}/training/cv_training.done",
+            expt=config["to_train"]
+        )
 
 
 #############################
@@ -177,7 +180,7 @@ def prepare_cv_splits_input(wildcards):
         if common is not None:
             fasta_file = common
         else:
-            fasta_file = config["datasets"][expt]["fasta"]
+            fasta_file = config["experiments"][expt]["fasta"]
 
     return {
         "fasta": fasta_file,
@@ -226,14 +229,14 @@ rule aggregate_cv_splits:
 def get_cv_trained_models(wildcards):
     """Helper function to get paths to trained models for a given CV fold."""
     tool_list = [
-            ("cpat", "logit.RData",),
+            ("cpat", "{fold}.logit.RData",),
             ("lncfinder", "{fold}_ss.RData",),
             ("lncfinder", "{fold}_no-ss.RData",),
             ("plncpro", "{fold}.model",),
             ("lncDC", "",),
             ("lncDC_ss", "",),
             ("mRNN", "trained/best_models/",),
-            ("lncrnabert", "models/",),
+            ("lncrnabert", "kmer/models/",),
             ("rnasamba", "{fold}_full.hdf5",)
     ]
 
@@ -315,35 +318,29 @@ rule cv_train_all_folds_for_tool:
 # FOLD TESTING RULES #
 ######################
 def get_cv_test_results(wildcards):
-    """Helper function to get paths to trained models for a given CV fold."""
+    """Helper function to get paths to test results for a given CV fold."""
+    tool_list = [
+        ("FEELnc", "{fold}_RF.txt"),
+        ("cpat", "{fold}.cpat.l.ORF_prob.best.tsv"),
+        ("cpat", "{fold}.cpat.p.ORF_prob.best.tsv"),
+        ("lncfinder", "{fold}_ss.lncfinder"),
+        ("lncfinder", "{fold}_no-ss.lncfinder"),
+        ("plncpro", "{fold}.plncpro"),
+        ("lncDC", "{fold}.lncDC.no_ss.csv"),
+        ("lncDC", "{fold}.lncDC.ss.csv"),
+        ("mRNN", "{fold}.mRNN.multi.tsv"),
+        ("lncrnabert", "kmer/classification.csv"),
+        ("rnasamba", "{fold}_full.tsv"),
+    ]
+
     expt = wildcards.expt
-    tool_name = wildcards.tool
-    n_folds = config["experiments"][expt].get("n_folds", DEFAULT_N_FOLDS)
-
-    tool_patterns = {
-        "FEELnc": "{fold}_RF.txt",
-        "CPAT": ["{fold}.cpat.l.ORF_prob.best.tsv", "{fold}.cpat.p.ORF_prob.best.tsv"],
-        "lncfinder": ["{fold}_ss.lncfinder", "{fold}_no-ss.lncfinder"],
-        "plncpro": "{fold}.plncpro",
-        "lncDC": ["{fold}.lncDC.no_ss.csv", "{fold}.lncDC.ss.csv"],
-        "mRNN": "{fold}.mRNN.multi.tsv",
-        "lncrnabert": "kmer/classification.csv",
-        "rnasamba": "{fold}_full.txt"
-    }
-
-    if tool_name not in tool_patterns:
-        raise ValueError(f"Tool '{tool_name}' not recognized.")
-
-    patterns = tool_patterns[tool_name]
-    if not isinstance(patterns, list):
-        patterns = [patterns]
-
+    fold = wildcards.fold
     basedir = f"results/{expt}/testing/{fold}/{{tool}}"
-    models = []
+    results = []
     for tool, path_template in tool_list:
-        model_path = os.path.join(basedir.format(tool=tool), path_template.format(fold=fold))
-        models.append(model_path)
-    return models
+        result_path = os.path.join(basedir.format(tool=tool), path_template.format(expt=expt, fold=fold))
+        results.append(result_path)
+    return results
 
 
 # Request test results for each fold
@@ -436,19 +433,17 @@ rule cv_training_orchestrator:
         """
 
 
-def get_all_cv_training_done(wildcards):
-    cv_expts = [k for k in config["experiments"] if k.endswith(".cv")]
-    return expand("results/{expt}/training/cv_training.done", expt=cv_expts)
+def get_all_cv_testing_inputs(wildcards):
+    """Expand testing fold outputs for the orchestrator rule."""
+    for expt in config["to_train"]:
+        n_folds = config["experiments"][expt].get("n_folds", DEFAULT_N_FOLDS)
+        for fold in range(1, n_folds + 1):
+            yield f"results/{expt}/testing/fold{fold}/testing.done"
 
 
-rule cv_final_report:
+rule cv_test_all_folds:
+    """
+    Target rule to gather all testing results for a given experiment across all folds.
+    """
     input:
-        get_all_cv_training_done
-    output:
-        "results/cv_orchestrator/final_report.txt"
-    shell:
-        """
-        mkdir -p results/cv_orchestrator
-        echo "CV training complete:" > {output}
-        for f in {input}; do echo "  $f" >> {output}; done
-        """
+        get_all_cv_testing_inputs

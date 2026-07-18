@@ -208,7 +208,7 @@ use rule lncDC_train as lncDC_train_with_precomputed_ss with:
     log:
         "logs/{expt}/training/{fold}/lncDC/train_{fold}_ss.log"
     params:
-        extra="-r -ss-file"
+        extra="-r --ss_file"
 
 
 rule diamond_makedb_train:

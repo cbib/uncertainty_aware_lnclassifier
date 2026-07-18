@@ -67,3 +67,4 @@ build/
 
 # Platform junk
 .DS_Store
+.worktrees/

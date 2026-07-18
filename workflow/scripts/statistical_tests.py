@@ -46,6 +46,9 @@ def prepare_features(features, supplementary, verbose=True):
     """Combine and preprocess all feature sets."""
     combined = pd.concat([features, supplementary], axis=1)
     combined = combined.loc[:, ~combined.columns.duplicated(keep="first")]
+    # ponytail: fillna(0) kept only for intra-pipeline NaN (e.g. a feature that could
+    # not be computed for a present transcript); cross-pipeline absence is handled
+    # upstream by build_pipeline_exclusion_report before this function is called.
     combined.fillna(0, inplace=True)
     combined = combined.apply(pd.to_numeric, errors="coerce")
 
