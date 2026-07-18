@@ -30,22 +30,24 @@ rule merge_supplementary_features:
     write a single merged feature TSV consumed by all downstream feature-analysis rules.
 
     Produces:
-      supplementary_features.tsv — cleaned, merged feature matrix (transcripts × features)
-                                    indexed by seq_ID; only transcripts present in every
-                                    non-empty pipeline are included
-      supplementary_excluded.tsv — exclusion report (may be empty);
-                                    columns: missing_pipelines, n_missing, reason
+      supplementary_features.tsv     — cleaned, merged feature matrix (transcripts × features)
+                                        indexed by seq_ID; only transcripts present with valid
+                                        data in every non-empty pipeline are included
+      supplementary_traceability.tsv — long-format report (may be empty), one row per
+                                        (transcript, issue); columns: category, pipeline, detail.
+                                        category ∈ {missing_from_pipeline, not_in_main_index,
+                                        invalid_data}
     """
     input:
-        binary   = "results/{expt}/tables/{expt}_binary_class_table.tsv",
+        binary   = "results/{expt}/tables/{expt}_full_table.tsv",
         te_rna   = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("te_features_rna")),
         te_dna   = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("te_features_dna")),
         nbd      = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("nbd_features")),
         scanfold = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("scanfold_features")),
         rg4      = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("rg4_features")),
     output:
-        features = "results/{expt}/features/supplementary_features.tsv",
-        excluded = "results/{expt}/features/supplementary_excluded.tsv",
+        features     = "results/{expt}/features/supplementary_features.tsv",
+        traceability = "results/{expt}/features/supplementary_traceability.tsv",
     params:
         te_rna_arg   = lambda wc: _opt_arg("--te-features-rna",   config["feature_analysis"][wc.expt].get("te_features_rna")),
         te_dna_arg   = lambda wc: _opt_arg("--te-features-dna",   config["feature_analysis"][wc.expt].get("te_features_dna")),
@@ -70,6 +72,6 @@ rule merge_supplementary_features:
             {params.scanfold_arg}           \
             {params.rg4_arg}                \
             --output       {output.features} \
-            --excl-output  {output.excluded} \
+            --trace-output {output.traceability} \
         2>&1 | tee {log}
         """

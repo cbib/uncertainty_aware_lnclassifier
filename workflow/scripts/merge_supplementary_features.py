@@ -3,8 +3,10 @@
 Merge all supplementary pipeline feature files into a single cleaned TSV.
 
 Applies per-pipeline index/column transformations via load_supplementary_features(),
-checks coverage against the main analysis transcript index via check_supplementary_coverage(),
-and writes the merged feature matrix + exclusion report.
+then build_supplementary_traceability() records — for every transcript not carried
+into the clean matrix — whether it was dropped because it is absent from a pipeline,
+absent from the main index, or carries invalid/incomplete data. Writes the merged
+feature matrix + a long-format traceability report.
 
 Downstream rules consume the merged TSV directly instead of loading individual
 pipeline files.
@@ -16,7 +18,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
-from utils.features import check_supplementary_coverage, load_supplementary_features
+from utils.features import build_supplementary_traceability, load_supplementary_features
 
 
 def parse_args():
@@ -35,7 +37,9 @@ def parse_args():
         "--output", required=True, help="Output path for merged features TSV"
     )
     p.add_argument(
-        "--excl-output", required=True, help="Output path for exclusion report TSV"
+        "--trace-output",
+        required=True,
+        help="Output path for the long-format traceability report TSV",
     )
     return p.parse_args()
 
@@ -69,11 +73,15 @@ def main():
         rg4_path=args.rg4_features,
     )
 
-    clean_index, excl_report = check_supplementary_coverage(main_index, supplementary)
-    excl_report.to_csv(args.excl_output, sep="\t")
-    if not excl_report.empty:
+    clean_index, trace_report = build_supplementary_traceability(
+        main_index, supplementary
+    )
+    trace_report.to_csv(args.trace_output, sep="\t")
+    if not trace_report.empty:
+        by_cat = trace_report["category"].value_counts().to_dict()
         print(
-            f"⚠ Excluded {len(excl_report)} transcripts — see {args.excl_output}",
+            f"⚠ Traceability: {len(trace_report)} issue rows "
+            f"({by_cat}) — see {args.trace_output}",
             file=sys.stderr,
         )
 
