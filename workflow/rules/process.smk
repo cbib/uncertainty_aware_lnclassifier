@@ -113,6 +113,7 @@ rule merge_all_fold_tables:
         simple_class="results/{expt}/tables/{expt}_simple_class_table.tsv",
         no_class="results/{expt}/tables/{expt}_no_class_table.tsv",
         binary_class="results/{expt}/tables/{expt}_binary_class_table.tsv",
+        dropout_report="results/{expt}/tables/{expt}_dropout_report.tsv",
     log:
         "logs/{expt}/testing/merge_all_fold_tables.log"
     conda:

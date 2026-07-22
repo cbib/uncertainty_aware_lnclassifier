@@ -25,6 +25,7 @@ try:
         setup_basic_logging,
         setup_snakemake_logging,
     )
+    from utils.process_tools import create_dropout_report
 except ImportError as e:
     print(f"Error importing from workflow utils: {e}", file=sys.stderr)
     print(f"Script dir: {script_dir}", file=sys.stderr)
@@ -95,6 +96,7 @@ def main():
             logger.info(f"Table types to process: {', '.join(table_types)}")
 
             total_rows = 0
+            simple_class_merged = None
             for table_type in table_types:
                 input_files = list(input_dict[table_type])
                 output_file = output_dict[table_type]
@@ -104,6 +106,24 @@ def main():
 
                 merged_df = merge_fold_tables(input_files, output_file, table_type)
                 total_rows += len(merged_df)
+
+                if table_type == "simple_class":
+                    simple_class_merged = merged_df
+
+            # Build a single combined dropout report from the merged simple_class
+            # table (deduped union across folds, since each transcript is tested
+            # in exactly one fold in CV).
+            if hasattr(output_dict, "keys") and "dropout_report" in output_dict.keys():
+                if simple_class_merged is None:
+                    raise KeyError(
+                        "dropout_report output requested but no 'simple_class' "
+                        "input table was found to build it from."
+                    )
+                dropout_path = output_dict["dropout_report"]
+                logger.info(f"\n--- Building combined dropout report ---")
+                report = create_dropout_report(simple_class_merged)
+                logger.info(f"Writing dropout report to {dropout_path}")
+                report.to_csv(dropout_path, sep="\t")
 
             logger.info("\n=== SUMMARY ===")
             logger.info(f"Table types processed: {len(table_types)}")
