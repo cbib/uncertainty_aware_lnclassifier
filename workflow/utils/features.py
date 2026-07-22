@@ -446,6 +446,30 @@ def _read_pipeline_file(path: str, sep: str = ",", label: str = "") -> pd.DataFr
     return df
 
 
+def _clean_supplementary(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop non-feature label/ID columns and coerce presence flags to 0/1.
+
+    ``transcript_type``/``coding_class`` are string metadata and the per-motif
+    ``*_transcript_id`` columns are IDs — none are numeric features. Left in, they
+    coerce to all-NaN and flag every transcript as ``invalid_data`` (emptying the
+    merge). ``*_has_*`` presence flags are stored True/False/NaN where NaN means the
+    element is absent (= 0), not a data gap — coerce them to int so 0 is the true
+    value rather than a dropped transcript.
+    """
+    drop = [
+        c
+        for c in df.columns
+        if c in ("transcript_type", "coding_class") or c.endswith("_transcript_id")
+    ]
+    df = df.drop(columns=drop)
+    flags = df.columns[df.columns.str.contains("_has_")]
+    if len(flags):
+        df[flags] = (
+            df[flags].apply(pd.to_numeric, errors="coerce").fillna(0).astype("int8")
+        )
+    return df
+
+
 def load_supplementary_features(
     te_rna_path: str = "",
     te_dna_path: str = "",
@@ -457,9 +481,11 @@ def load_supplementary_features(
     Load supplementary pipeline feature files, applying per-pipeline index and
     column transformations.
 
-    Does **not** apply numeric-type filtering, ``fillna``, or
-    ``remove_constant_features`` — those differ per downstream step and remain
-    the caller's responsibility.
+    Drops non-feature label/ID columns and converts ``*_has_*`` presence flags to
+    0/1 (NaN = element absent = 0) via :func:`_clean_supplementary`. Does **not**
+    apply general ``fillna`` over measured features, numeric-type filtering, or
+    ``remove_constant_features`` — those differ per downstream step and remain the
+    caller's responsibility.
 
     Parameters
     ----------
@@ -478,25 +504,28 @@ def load_supplementary_features(
 
     Per-pipeline transformations
     ----------------------------
-    te_rna   : drops ``transcript_length``; prefixes columns with ``rna_``
-    te_dna   : drops ``transcript_length`` (unspliced genomic length); prefixes with ``dna_``
-    nbd      : renames ``transcript_length`` → ``unspliced_length``
+    te_rna   : drops ``transcript_length``, metadata/flag-cleans, prefixes columns with ``rna_``
+    te_dna   : drops ``transcript_length`` (unspliced genomic length), metadata/flag-cleans, prefixes with ``dna_``
+    nbd      : renames ``transcript_length`` → ``unspliced_length``, metadata/flag-cleans
     scanfold : strips ``.win*`` suffix from index; deduplicates; drops ``length``, ``source_dir``
     rg4      : strips ``|…`` from index (keeps transcript ID only); deduplicates; drops ``transcript_length``
     """
     te_rna = _read_pipeline_file(te_rna_path, sep=",", label="TE RNA")
     if not te_rna.empty:
         te_rna.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+        te_rna = _clean_supplementary(te_rna)
         te_rna.columns = [f"rna_{c}" for c in te_rna.columns]
 
     te_dna = _read_pipeline_file(te_dna_path, sep=",", label="TE DNA")
     if not te_dna.empty:
         te_dna.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+        te_dna = _clean_supplementary(te_dna)
         te_dna.columns = [f"dna_{c}" for c in te_dna.columns]
 
     nbd = _read_pipeline_file(nbd_path, sep=",", label="NBD")
     if not nbd.empty:
         nbd.rename(columns={"transcript_length": "unspliced_length"}, inplace=True)
+        nbd = _clean_supplementary(nbd)
 
     scanfold = _read_pipeline_file(scanfold_path, sep="\t", label="ScanFold")
     if not scanfold.empty:

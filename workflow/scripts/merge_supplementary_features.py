@@ -39,10 +39,7 @@ def parse_args():
     p.add_argument(
         "--trace-output",
         required=True,
-        help="Output path for the long-format traceability report TSV",
-        "--trace-output",
-        required=True,
-        help="Output path for the long-format traceability report TSV",
+        help="Output path for the long-format excluded-transcripts report TSV",
     )
     return p.parse_args()
 
@@ -83,8 +80,6 @@ def main():
     if not trace_report.empty:
         by_cat = trace_report["category"].value_counts().to_dict()
         print(
-            f"⚠ Traceability: {len(trace_report)} issue rows "
-            f"({by_cat}) — see {args.trace_output}",
             f"⚠ Traceability: {len(trace_report)} issue rows "
             f"({by_cat}) — see {args.trace_output}",
             file=sys.stderr,

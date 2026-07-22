@@ -33,7 +33,7 @@ rule merge_supplementary_features:
       supplementary_features.tsv     — cleaned, merged feature matrix (transcripts × features)
                                         indexed by seq_ID; only transcripts present with valid
                                         data in every non-empty pipeline are included
-      supplementary_traceability.tsv — long-format report (may be empty), one row per
+      excluded_transcripts.tsv       — long-format report (may be empty), one row per
                                         (transcript, issue); columns: category, pipeline, detail.
                                         category ∈ {missing_from_pipeline, not_in_main_index,
                                         invalid_data}
@@ -47,7 +47,7 @@ rule merge_supplementary_features:
         rg4      = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("rg4_features")),
     output:
         features     = "results/{expt}/features/supplementary_features.tsv",
-        traceability = "results/{expt}/features/supplementary_traceability.tsv",
+        traceability = "results/{expt}/features/excluded_transcripts.tsv",
     params:
         te_rna_arg   = lambda wc: _opt_arg("--te-features-rna",   config["feature_analysis"][wc.expt].get("te_features_rna")),
         te_dna_arg   = lambda wc: _opt_arg("--te-features-dna",   config["feature_analysis"][wc.expt].get("te_features_dna")),
