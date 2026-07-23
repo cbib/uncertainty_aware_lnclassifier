@@ -96,6 +96,7 @@ FEATURE_LABEL_DICT: dict[str, str] = {
     "global_gaps_max": "Max gap between rep. elements",
     "global_rm_total_length": "Total length of rep. elements",
     "global_rm_total_length_pct": "Total coverage of rep. elements",
+    "lctr_count": "Low complexity + tandem repeat count",
     # ── REP features (continuous) — DNA ───────────────────────────────────────
     "dna_te_gaps_max": "Longest gap between TEs",
     "dna_te_sum_hit_length": "Total length of TEs",
@@ -133,6 +134,7 @@ FEATURE_LABEL_DICT: dict[str, str] = {
     "str_mean_length_pct": "Mean coverage of STRs",
     "ir_max_length_pct": "Max coverage of an IR",
     "str_max_length_pct": "Max coverage of a STR",
+    "unspliced_length": "Gene body length",
     # ── REP features (categorical) ─────────────────────────────────────────────
     # Legacy feature names, kept for backward compatibility
     "te_has_sine": "SINE",
@@ -144,6 +146,7 @@ FEATURE_LABEL_DICT: dict[str, str] = {
     "lctr_has_low_complexity": "Low Complexity Region",
     "lctr_has_simple_repeat": "Simple Repeat",
     "lctr_has_satellite": "Satellite",
+    "pseudo_has_scrna": "scRNA pseudogene",  # small cytoplasmic RNA pseudogene
     # ── REP features (categorical) — DNA ──────────────────────────────────────
     "dna_te_has_sine": "SINE",
     "dna_te_has_dna": "DNA transposon",
@@ -165,8 +168,8 @@ FEATURE_LABEL_DICT: dict[str, str] = {
     "rna_lctr_has_simple_repeat": "Simple Repeat",
     "rna_lctr_has_satellite": "Satellite",
     # ── Non-B DNA features (categorical) ─────────────────────────────────────
-    "gq_plus_present": "G-Quadruplex (+ strand)",
-    "gq_minus_present": "G-Quadruplex (- strand)",
+    "gq_plus_present": "G-quadruplex (+ strand)",
+    "gq_minus_present": "G-quadruplex (- strand)",
     "z_present": "Z-DNA",
     "tri_present": "Triplex DNA",
     "apr_present": "A-Phased Repeat",
@@ -174,6 +177,13 @@ FEATURE_LABEL_DICT: dict[str, str] = {
     "dr_present": "Direct Repeat",
     "mr_present": "Mirror Repeat",
     "str_present": "Short Tandem Repeat",
+    # –– ScanFold2 features (continuous)
+    "n_z_lt_minus1": "Nucleotides with z-score < -1",
+    "n_z_lt_minus2": "Nucleotides with z-score < -2",
+    "avgZ_max": "Max average z-score",
+    "avgZ_min": "Min average z-score",
+    "avgZ_mean": "Mean average z-score",
+    "avgZ_median": "Median average z-score",
 }
 
 # Overwrite categorical feature names for when they are outside of the categorical plot
@@ -193,6 +203,7 @@ DNA_ONLY: frozenset[str] = frozenset(
         "z_hit_count",
         "gq_hit_count",
         "mr_unique_length",
+        "unspliced_length",
         "tri_gaps_max",
         "ir_gaps_mean_pct",
         "str_mean_length_pct",
@@ -441,7 +452,7 @@ def plot_stat_test_figure(
             patch.set_edgecolor("none")
     sm = plt.cm.ScalarMappable(cmap=cmap_cat, norm=norm_cat)
     cbar = plt.colorbar(sm, cax=cax)
-    cbar.set_label("Cramér's V", fontsize=6)
+    cbar.set_label("Effect size (Cramér's V)", fontsize=6)
     cbar.set_ticks([0, 0.2, 0.4, 0.6])
     cbar.ax.tick_params(labelsize=6)
 
