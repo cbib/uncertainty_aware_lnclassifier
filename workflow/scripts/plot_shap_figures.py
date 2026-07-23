@@ -310,6 +310,7 @@ def plot_shap_prob_distribution(all_preds: pd.DataFrame, output_dir: Path) -> No
 
 
 # ── Figures 14–17: SHAP waterfall ─────────────────────────────────────────────
+# TODO: Make this configurable via CLI instead of hard-coded
 _CHERRY_PICK = {
     "low_entropy_coding": ("ENST00000265171", "EGF"),
     "low_entropy_lncrna": ("ENST00000710946", "MALAT1"),
