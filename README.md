@@ -268,3 +268,65 @@ git commit -m "Update te_pipeline and nonb-pipeline submodules"
 | `config/feature_analysis_config.yaml` | Feature analysis + figures |
 | `config/shap_config.yaml` | SHAP pipeline + figures |
 | `config/figures_config.yaml` | Figures only |
+
+## Development
+
+Run these checks from the repository root after making workflow or script
+changes. They validate formatting, Python tests, Snakemake syntax, and DAG
+resolution without running the computationally expensive pipeline.
+
+### Pre-commit and Python checks
+
+Install the development hooks once, then run them over the whole repository:
+
+```bash
+pre-commit install
+pre-commit run --all-files
+python -m pytest tests/ -q
+python -m compileall -q workflow/scripts tests
+```
+
+`pre-commit` runs YAML validation, whitespace checks, Black, isort, and
+notebook cleanup as configured in `.pre-commit-config.yaml`.
+
+### Snakemake linting
+
+Lint every active Snakemake entry point independently. This is important
+because each entry point has its own config files and included rule graph:
+
+```bash
+snakemake --lint -s Snakefile
+snakemake --lint -s workflow/rules/feature_analysis.smk
+snakemake --lint -s workflow/rules/figures.smk
+```
+
+### Resolve and inspect every DAG
+
+First perform a dry-run for each complete subdag. These commands construct the
+DAG and check inputs, wildcards, included rules, and config resolution without
+executing jobs:
+
+```bash
+snakemake -s Snakefile --use-conda --cores 1 --dry-run all_cv
+snakemake -s workflow/rules/feature_analysis.smk \
+          --use-conda --cores 1 --dry-run feature_analysis_all
+snakemake -s workflow/rules/figures.smk \
+          --use-conda --cores 1 --dry-run all_figures
+```
+
+For a visual inspection of each resolved graph, render the DAGs with
+Graphviz. The output files are temporary and should not be committed:
+
+```bash
+snakemake -s Snakefile --cores 1 --dag all_cv \
+  | dot -Tpdf -o /tmp/lnclassifier-cv-dag.pdf
+snakemake -s workflow/rules/feature_analysis.smk --cores 1 --dag \
+  feature_analysis_all \
+  | dot -Tpdf -o /tmp/lnclassifier-feature-analysis-dag.pdf
+snakemake -s workflow/rules/figures.smk --cores 1 --dag all_figures \
+  | dot -Tpdf -o /tmp/lnclassifier-figures-dag.pdf
+```
+
+When a change affects only one stage, repeat its stage-specific dry-run after
+the full checks above. Do not use `--unlock`, `--cleanup-metadata`, or force
+reruns as validation commands unless the purpose of the change requires them.
