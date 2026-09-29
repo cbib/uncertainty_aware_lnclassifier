@@ -39,7 +39,7 @@ rule merge_plncpro_feature_table:
     log:
         "logs/{expt}/testing/{fold}/merge_plncpro_feature_table.log"
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     run:
         import pandas as pd
         df = pd.read_csv(
@@ -64,7 +64,7 @@ rule process:
     log:
         "logs/{expt}/testing/{fold}/process.log"
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     params:
         prefix=lambda wc: f"results/{wc.expt}/testing/{wc.fold}/tables/{wc.fold}",
     script:
@@ -117,7 +117,7 @@ rule merge_all_fold_tables:
     log:
         "logs/{expt}/testing/merge_all_fold_tables.log"
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     script:
         "../scripts/merge_folds.py"
 

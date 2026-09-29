@@ -131,7 +131,7 @@ rule shap_fold:
     resources:
         mem_mb  = 40000,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/shap_train_fold.py \
@@ -181,7 +181,7 @@ rule shap_aggregate:
     resources:
         mem_mb  = 16000,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/shap_aggregate.py \

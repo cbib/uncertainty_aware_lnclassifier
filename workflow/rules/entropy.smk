@@ -38,7 +38,7 @@ rule compute_entropy_metrics:
         mem_mb  = 8000,
         runtime = 30,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/compute_entropy.py \
@@ -80,7 +80,7 @@ rule compute_entropy_groups:
         mem_mb  = 2000,
         runtime = 10,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/compute_entropy_groups.py \

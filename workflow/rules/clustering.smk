@@ -89,7 +89,7 @@ rule feature_clustering:
         mem_mb  = 32000,
         runtime = 120,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/compute_feature_clustering.py  \

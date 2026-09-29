@@ -121,7 +121,7 @@ rule mrnn_augmented_dataset:
         pc_augmented="results/{expt}/training/{fold}/mRNN/datasets/mRNN_aug{SEED}_pc.fa",
         lnc_augmented="results/{expt}/training/{fold}/mRNN/datasets/mRNN_aug{SEED}_lnc.fa"
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     log:
         "logs/{expt}/training/{fold}/mRNN/datasets/mRNN_augmented_dataset_{SEED}.log"
     benchmark:
@@ -445,7 +445,7 @@ rule mrnn_get_best_trained_models:
     log:
         "logs/{expt}/training/{fold}/mRNN/mRNN_get_best_trained_models_{fold}.log"
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     params:
         accuracy_path=lambda wc: f"results/{wc.expt}/training/{wc.fold}/mRNN/trained/accuracy_tests",
         n_models=TRAIN_STAGES["train"]["n_select"]

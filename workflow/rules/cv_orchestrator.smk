@@ -111,7 +111,7 @@ rule prepare_cv_splits:
     log:
         "logs/{expt}/datasets/prepare_cv_splits.log",
     conda:
-        'lnc-datasets'
+        '../envs/lnc-datasets_env.yaml'
     params:
         n_splits=lambda wc: config["experiments"][wc.expt].get("n_folds", DEFAULT_N_FOLDS),
         seed=42,

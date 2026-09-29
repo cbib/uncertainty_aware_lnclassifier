@@ -91,7 +91,7 @@ rule rfecv_select:
     resources:
         mem_mb  = 50000,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/shap_rfecv.py \
@@ -143,7 +143,7 @@ rule rfecv_consensus:
     resources:
         mem_mb  = 4000,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/shap_rfecv_consensus.py \\

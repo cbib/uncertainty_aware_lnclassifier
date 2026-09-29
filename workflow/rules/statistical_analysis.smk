@@ -85,7 +85,7 @@ rule statistical_tests:
         mem_mb=16000,
         runtime=60,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/statistical_tests.py \

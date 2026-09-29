@@ -75,7 +75,7 @@ rule get_cds_from_dataset:
     log:
         "logs/{expt}/datasets/get_cds_from_dataset_{fold}.log"
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     script:
         "../scripts/get_cds_from_ids.py"
 
@@ -188,7 +188,7 @@ rule filter_cds_with_ss:
     log:
         "logs/{expt}/datasets/{fold}/filter_cds_with_ss_{fold}.log"
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     script:
         "../scripts/filter_cds_with_ss.py"
 

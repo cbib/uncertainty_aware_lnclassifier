@@ -48,7 +48,7 @@ rule one_transcript_per_gene_split:
         out_dir=lambda wc, output: subpath(output.one_per_gene, parent=True),
         prefix=lambda wc: f"{wc.db}",
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     script:
         "../scripts/one_transcript_per_gene_split.py"
 '''
@@ -71,7 +71,7 @@ rule train_plus_validation_dataset:
     log:
         "logs/{expt}/datasets/{fold}/{tool}/{fold}.{tool}_train_plus_validation_split.log",
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     params:
         seed=None,
         train_split=lambda wc: config["training"][wc.expt]["train_split"],  # This is global for all tools benchmarked
@@ -104,7 +104,7 @@ rule combine_pc_and_lnc:
     output:
         "results/{expt}/training/cdhit/{expt}.pc_and_lnc.fa",
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     log:
         "logs/training/combine_pc_and_lnc_{expt}.log",
     shell:
@@ -143,7 +143,7 @@ rule common_transcripts_between_versions:
             ".comparison.tsv"
         ),
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     log:
         "logs/gencode_comparison/common_transcripts_{old_db}_{new_db}.log",
     params:
@@ -249,7 +249,7 @@ rule split_pc_and_lnc_after_cdhit:
             ".redun_lnc.fa",
         ),
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     params:
         output_prefix=lambda wc, output: os.path.join(
             subpath(output[0], parent=True), wc.dset
@@ -417,7 +417,7 @@ rule create_inference_dataset:
         fasta="results/{expt}/training/{dset}.inference.fa",
         info_table="results/{expt}/training/{dset}.inference_info.tsv",
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     log:
         "logs/{dset}/training/create_inference_dataset_{dset}.log",
     script:
@@ -429,7 +429,7 @@ rule feelnc_dataset:
         pc='resources/training/FEELnc_datasets/FEELnc_v24_5000_pc_train.fasta',
         lnc='resources/training/FEELnc_datasets/FEELnc_v24_5000_lnc_train.fasta'
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     log:
         "logs/feelnc_dataset.log"
     script:
