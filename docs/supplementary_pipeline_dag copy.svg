@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1280" viewBox="0 0 1600 1280">
+  <title>LNClassifier supplementary workflow DAGs</title>
+  <desc>Independent TE, Non-B DNA and RNA structure pipelines followed by the revision-wt benchmark, feature analysis and figure production.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#64748b"/></marker>
+    <marker id="handoff" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#334155"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity=".14"/></filter>
+    <style>
+      text{font-family:Inter,Arial,sans-serif;fill:#172033}
+      .title{font-size:28px;font-weight:700}.subtitle{font-size:15px;fill:#526176}
+      .panel-title{font-size:20px;font-weight:700}.panel-note{font-size:13px;fill:#64748b}
+      .node{stroke-width:2;rx:12;filter:url(#shadow)}.label{font-size:15px;font-weight:600}.small{font-size:12px;font-weight:400}
+      .edge{stroke:#64748b;stroke-width:2.5;fill:none;marker-end:url(#arrow)}
+      .edge-dash{stroke:#64748b;stroke-width:2.5;stroke-dasharray:8 7;fill:none;marker-end:url(#arrow)}
+      .handoff{stroke:#334155;stroke-width:4;fill:none;marker-end:url(#handoff)}
+      .te{fill:#e8f3ff;stroke:#3787c5}.nbd{fill:#eaf8ef;stroke:#45a36b}.rna{fill:#fff2df;stroke:#d58b2b}.rev{fill:#f0eaff;stroke:#8768c5}.analysis{fill:#f8eaf2;stroke:#bc5c87}.output{fill:#e8f4f2;stroke:#36958c}.input{fill:#f1f5f9;stroke:#94a3b8}
+      .legend{font-size:13px;fill:#526176}
+    </style>
+  </defs>
+
+  <rect width="1600" height="1280" fill="#ffffff"/>
+  <text x="70" y="58" class="title">LNClassifier workflow DAGs</text>
+  <text x="70" y="86" class="subtitle">Supplementary overview: independent data-generation workflows precede the revision-wt benchmark and downstream analysis.</text>
+
+  <!-- panel 1 -->
+  <rect x="55" y="120" width="470" height="355" rx="18" fill="#fbfdff" stroke="#cbd5e1"/>
+  <text x="80" y="157" class="panel-title">A · TE feature generation</text>
+  <text x="80" y="180" class="panel-note">Four RepeatMasker chunks in the v47 configuration</text>
+  <rect x="90" y="207" width="190" height="47" class="node input"/><text x="185" y="228" text-anchor="middle" class="label">GTF + transcript FASTA</text><text x="185" y="246" text-anchor="middle" class="small">annotation / sequence inputs</text>
+  <path d="M185 254 V278" class="edge"/>
+  <rect x="90" y="279" width="190" height="47" class="node te"/><text x="185" y="300" text-anchor="middle" class="label">Prepare and validate FASTA</text><text x="185" y="318" text-anchor="middle" class="small">IDs, lengths, headers</text>
+  <path d="M185 326 V350" class="edge"/>
+  <rect x="90" y="351" width="190" height="47" class="node te"/><text x="185" y="372" text-anchor="middle" class="label">RepeatMasker × 4 chunks</text><text x="185" y="390" text-anchor="middle" class="small">parallel rule instances</text>
+  <path d="M280 375 H340" class="edge"/>
+  <rect x="340" y="351" width="145" height="47" class="node te"/><text x="412" y="372" text-anchor="middle" class="label">Merge repeats</text><text x="412" y="390" text-anchor="middle" class="small">annotation table</text>
+  <path d="M412 398 V422" class="edge"/>
+  <rect x="340" y="423" width="145" height="34" class="node output"/><text x="412" y="445" text-anchor="middle" class="label">TE features</text>
+
+  <!-- panel 2 -->
+  <rect x="565" y="120" width="470" height="355" rx="18" fill="#fbfffc" stroke="#cbd5e1"/>
+  <text x="590" y="157" class="panel-title">B · Non-B DNA features</text>
+  <text x="590" y="180" class="panel-note">Motif generation and two analysis branches</text>
+  <rect x="600" y="207" width="180" height="43" class="node input"/><text x="690" y="233" text-anchor="middle" class="label">GTF + GRCh38 assembly</text>
+  <path d="M690 250 V273" class="edge"/>
+  <rect x="600" y="274" width="180" height="47" class="node nbd"/><text x="690" y="295" text-anchor="middle" class="label">Annotation / BED prep</text><text x="690" y="313" text-anchor="middle" class="small">transcript + exon BEDs</text>
+  <path d="M780 297 H835" class="edge"/>
+  <rect x="835" y="274" width="165" height="47" class="node nbd"/><text x="917" y="295" text-anchor="middle" class="label">Motif BED generation</text><text x="917" y="313" text-anchor="middle" class="small">9 motifs; G4 × chromosomes</text>
+  <path d="M690 321 V350" class="edge"/><path d="M917 321 V350" class="edge"/>
+  <rect x="600" y="351" width="180" height="47" class="node nbd"/><text x="690" y="372" text-anchor="middle" class="label">Basic intersections</text><text x="690" y="390" text-anchor="middle" class="small">per-motif summaries</text>
+  <rect x="835" y="351" width="165" height="47" class="node nbd"/><text x="917" y="372" text-anchor="middle" class="label">Extended intersections</text><text x="917" y="390" text-anchor="middle" class="small">exon-level features</text>
+  <path d="M917 398 V422" class="edge"/>
+  <rect x="835" y="423" width="165" height="34" class="node output"/><text x="917" y="445" text-anchor="middle" class="label">NBD features + tests</text>
+
+  <!-- panel 3 -->
+  <rect x="1075" y="120" width="470" height="355" rx="18" fill="#fffdf9" stroke="#cbd5e1"/>
+  <text x="1100" y="157" class="panel-title">C · RNA structure features</text>
+  <text x="1100" y="180" class="panel-note">rG4detector default path; ScanFold is optional/separate</text>
+  <rect x="1110" y="207" width="180" height="43" class="node input"/><text x="1200" y="233" text-anchor="middle" class="label">Transcript FASTA</text>
+  <path d="M1200 250 V273" class="edge"/>
+  <rect x="1110" y="274" width="180" height="47" class="node rna"/><text x="1200" y="295" text-anchor="middle" class="label">Batch and detect rG4</text><text x="1200" y="313" text-anchor="middle" class="small">rG4 predictions / detections</text>
+  <path d="M1290 297 H1345" class="edge"/>
+  <rect x="1345" y="274" width="165" height="47" class="node rna"/><text x="1427" y="295" text-anchor="middle" class="label">Merge and summarize</text><text x="1427" y="313" text-anchor="middle" class="small">annotations + peak counts</text>
+  <path d="M1427 321 V351" class="edge"/>
+  <rect x="1345" y="352" width="165" height="47" class="node output"/><text x="1427" y="373" text-anchor="middle" class="label">rG4 features</text>
+  <path d="M1200 321 V374 H1290" class="edge-dash"/>
+  <rect x="1110" y="375" width="180" height="47" class="node rna"/><text x="1200" y="396" text-anchor="middle" class="label">ScanFold branch</text><text x="1200" y="414" text-anchor="middle" class="small">final-partner statistics</text>
+  <path d="M1290 398 H1345" class="edge-dash"/>
+
+  <!-- panel 4 -->
+  <rect x="55" y="510" width="1490" height="460" rx="18" fill="#fcfbff" stroke="#cbd5e1"/>
+  <text x="80" y="548" class="panel-title">D · revision-wt benchmark, feature analysis and figures</text>
+  <text x="80" y="571" class="panel-note">The authoritative final pipeline DAG; fold/tool expansions are grouped here for readability.</text>
+  <rect x="95" y="615" width="205" height="55" class="node input"/><text x="197" y="639" text-anchor="middle" class="label">Sequence + annotations</text><text x="197" y="658" text-anchor="middle" class="small">CV experiment inputs</text>
+  <path d="M300 642 H350" class="edge"/>
+  <rect x="350" y="615" width="205" height="55" class="node rev"/><text x="452" y="639" text-anchor="middle" class="label">Dataset preparation</text><text x="452" y="658" text-anchor="middle" class="small">CD-HIT, folds, train/test sets</text>
+  <path d="M555 642 H605" class="edge"/>
+  <rect x="605" y="615" width="205" height="55" class="node rev"/><text x="707" y="639" text-anchor="middle" class="label">Training × folds/tools</text><text x="707" y="658" text-anchor="middle" class="small">CPU/GPU model branches</text>
+  <path d="M810 642 H860" class="edge"/>
+  <rect x="860" y="615" width="205" height="55" class="node rev"/><text x="962" y="639" text-anchor="middle" class="label">Inference × folds/tools</text><text x="962" y="658" text-anchor="middle" class="small">classifier predictions</text>
+  <path d="M1065 642 H1115" class="edge"/>
+  <rect x="1115" y="615" width="205" height="55" class="node rev"/><text x="1217" y="639" text-anchor="middle" class="label">Table processing</text><text x="1217" y="658" text-anchor="middle" class="small">fold and experiment tables</text>
+  <path d="M1320 642 H1370" class="edge"/>
+  <rect x="1370" y="615" width="135" height="55" class="node output"/><text x="1437" y="639" text-anchor="middle" class="label">Merged tables</text><text x="1437" y="658" text-anchor="middle" class="small">analysis index</text>
+  <path d="M1437 670 V712" class="edge"/>
+  <rect x="170" y="755" width="180" height="55" class="node analysis"/><text x="260" y="779" text-anchor="middle" class="label">Entropy</text><text x="260" y="798" text-anchor="middle" class="small">uncertainty groups</text>
+  <rect x="400" y="755" width="180" height="55" class="node analysis"/><text x="490" y="779" text-anchor="middle" class="label">Clustering</text><text x="490" y="798" text-anchor="middle" class="small">feature correlations</text>
+  <rect x="630" y="755" width="180" height="55" class="node analysis"/><text x="720" y="779" text-anchor="middle" class="label">Embeddings</text><text x="720" y="798" text-anchor="middle" class="small">PCA / UMAP / t-SNE</text>
+  <rect x="860" y="755" width="180" height="55" class="node analysis"/><text x="950" y="779" text-anchor="middle" class="label">SHAP</text><text x="950" y="798" text-anchor="middle" class="small">feature importance</text>
+  <rect x="1090" y="755" width="180" height="55" class="node analysis"/><text x="1180" y="779" text-anchor="middle" class="label">Statistics</text><text x="1180" y="798" text-anchor="middle" class="small">group comparisons</text>
+  <path d="M1437 712 V730 H260 V755 M1437 730 H1180 V755 M1437 730 H950 V755 M1437 730 H720 V755 M1437 730 H490 V755" class="edge"/>
+  <path d="M260 810 V850 M490 810 V850 M720 810 V850 M950 810 V850 M1180 810 V850" class="edge"/>
+  <rect x="500" y="861" width="470" height="55" class="node output"/><text x="735" y="885" text-anchor="middle" class="label">Publication figures, tables and supplementary analyses</text><text x="735" y="904" text-anchor="middle" class="small">performance · entropy · embeddings · SHAP · agreement</text>
+
+  <!-- panel 5 -->
+  <rect x="55" y="1005" width="1490" height="205" rx="18" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="80" y="1042" class="panel-title">E · Required execution order and provenance boundary</text>
+  <text x="80" y="1066" class="panel-note">The upstream workflows are independent Snakemake DAGs. Their feature files must exist before revision-wt analysis.</text>
+  <rect x="105" y="1100" width="190" height="48" class="node te"/><text x="200" y="1129" text-anchor="middle" class="label">TE feature files</text>
+  <rect x="355" y="1100" width="190" height="48" class="node nbd"/><text x="450" y="1129" text-anchor="middle" class="label">NBD feature files</text>
+  <rect x="605" y="1100" width="190" height="48" class="node rna"/><text x="700" y="1129" text-anchor="middle" class="label">rG4 / ScanFold files</text>
+  <path d="M295 1124 H1090 M545 1124 H1090 M795 1124 H1090" class="handoff"/>
+  <rect x="1090" y="1090" width="300" height="68" class="node rev"/><text x="1240" y="1118" text-anchor="middle" class="label">Run revision-wt</text><text x="1240" y="1139" text-anchor="middle" class="small">CV → feature analysis → figures</text>
+  <text x="105" y="1180" class="legend">Solid arrows: dependencies within a workflow</text><text x="520" y="1180" class="legend">Dashed arrows: optional branch</text><text x="865" y="1180" class="legend">Heavy arrows: cross-workflow handoff</text>
+</svg>
