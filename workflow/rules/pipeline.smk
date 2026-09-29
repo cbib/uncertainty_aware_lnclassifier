@@ -150,7 +150,7 @@ rule prepare_cv_splits:
     log:
         "logs/{expt}/datasets/prepare_cv_splits.log",
     conda:
-        'lnc-datasets'
+        '../envs/lnc-datasets_env.yaml'
     params:
         n_splits=N_FOLD,
         seed=42,

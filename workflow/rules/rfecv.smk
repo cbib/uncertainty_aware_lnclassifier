@@ -60,6 +60,7 @@ rule rfecv_select:
         train_pc          = "results/{expt}/datasets/fold{fold}/train_pc.fa",
         train_lnc         = "results/{expt}/datasets/fold{fold}/train_lnc.fa",
         optimal_threshold = "results/{expt}/features/clustering/optimal_threshold.txt",
+        supplementary     = "results/{expt}/features/supplementary_features.tsv",
     output:
         sel_csv   = "results/{expt}/features/rfecv/fold{fold}/rfecv_feature_selection.csv",
         cv_scores = "results/{expt}/features/rfecv/fold{fold}/rfecv_cv_scores.csv",
@@ -68,8 +69,6 @@ rule rfecv_select:
         imp_plot  = "results/{expt}/features/rfecv/fold{fold}/rfecv_importance.png",
     params:
         out_dir           = "results/{expt}/features/rfecv/fold{fold}",
-        te_arg            = lambda wc: _opt_arg("--te-features", _shap_cfg(wc).get("te_features")),
-        nbd_arg           = lambda wc: _opt_arg("--nbd-features", _shap_cfg(wc).get("nbd_features")),
         cluster_file_arg  = lambda wc: _rfecv_cluster_arg(wc),
         cluster_threshold = lambda wc, input: (
             _shap_cfg(wc).get("cluster_threshold") or open(input.optimal_threshold).read().strip()
@@ -92,7 +91,7 @@ rule rfecv_select:
     resources:
         mem_mb  = 50000,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/shap_rfecv.py \
@@ -100,8 +99,7 @@ rule rfecv_select:
             --fold              {wildcards.fold} \
             --results-dir       results \
             --output-dir        {params.out_dir} \
-            {params.te_arg} \
-            {params.nbd_arg} \
+            --supplementary-features {input.supplementary} \
             --max-transcripts   {params.max_transcripts} \
             --cv-folds          {params.cv_folds} \
             --cv-repeats        {params.cv_repeats} \
@@ -145,7 +143,7 @@ rule rfecv_consensus:
     resources:
         mem_mb  = 4000,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/shap_rfecv_consensus.py \\

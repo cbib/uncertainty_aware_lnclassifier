@@ -74,7 +74,7 @@ rule lncfinder_subset_ss:
     output:
         out="results/{expt}/datasets/{fold}/{dset}.fa.ss",
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     log:
         "logs/{expt}/datasets/{fold}/lncfinder/{dset}_subset_ss.log",
     benchmark:

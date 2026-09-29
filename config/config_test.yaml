@@ -1,0 +1,42 @@
+to_train:
+  - toy.cv
+
+training:
+  # ponytail: kept for train.smk compat (config['training'] references)
+  toy.cv:
+    redundancy_reduction: none
+    balanced: true
+    train_split: 80
+    mRNN_validation_split: 20
+    lncrnabert_validation_split: 20
+    train_pc: tests/data/toy/toy.pc_transcripts.fa
+    train_lnc: tests/data/toy/toy.lncrna_transcripts.fa
+
+experiments:
+  toy.cv:
+    reference: gencode.v47
+    fasta: "tests/data/toy/toy.transcripts.fa"
+    pc_fasta: "tests/data/toy/toy.pc_transcripts.fa"
+    lnc_fasta: "tests/data/toy/toy.lncrna_transcripts.fa"
+    reference_cds: "resources/Homo_sapiens.GRCh38.cds.all.fa.gz"
+    n_folds: 2
+    # No preprocessing: skip common_with and cdhit for fast test runs
+    models:
+      cpat: custom
+      rnasamba: custom
+      lncfinder: custom
+      lncrnabert: custom
+      plncpro: custom
+    tools:
+      - feelnc
+      - cpat_p
+      - cpat_l
+      - cpat_cutoff
+      - mrnn
+      - lncrnabert
+      - rnasamba_full
+      - plncpro
+      - lncfinder_ss
+      - lncfinder_no_ss
+      - lncDC_no_ss
+      - lncDC_ss

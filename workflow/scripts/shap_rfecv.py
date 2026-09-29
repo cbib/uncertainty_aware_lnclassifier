@@ -28,8 +28,7 @@ Usage examples
 --------------
   # Basic run on all transcripts, full feature set
   python shap_rfecv.py --dataset gencode.v47.common.cdhit.cv --fold 1 \\
-      --te-features te_pipeline/.../all_transcripts_te_features.csv \\
-      --nbd-features nonb-pipeline/.../features_nonb_features.csv \\
+      --supplementary-features results/gencode.v47.common.cdhit.cv/features/supplementary_features.tsv \\
       --output-dir results/gencode.v47.common.cdhit.cv/rfecv
 
   # Start from correlation-filtered features (recommended, faster)
@@ -143,9 +142,12 @@ def parse_args():
         help="Base results directory (default: results)",
     )
 
-    # ── supplementary features ────────────────────────────────────────────────
-    p.add_argument("--te-features", default="")
-    p.add_argument("--nbd-features", default="")
+    # ── merged supplementary features ─────────────────────────────────────────
+    p.add_argument(
+        "--supplementary-features",
+        required=True,
+        help="Path to merged supplementary features TSV (output of merge_supplementary_features.py)",
+    )
 
     # ── feature mode & optional pre-filtering ────────────────────────────────
     p.add_argument(
@@ -252,31 +254,12 @@ def _parse_max_transcripts(val: str):
     return int(val)
 
 
-def load_supplementary(te_path: str, nbd_path: str):
-    def _load_df(path: str, label: str) -> pd.DataFrame:
-        if not path:
-            print(f"[rfecv] {label} features disabled")
-            return pd.DataFrame()
-
-        p = Path(path)
-        if not p.exists():
-            print(f"[rfecv] {label} features not found at {path} — skipping")
-            return pd.DataFrame()
-
-        raw = pd.read_csv(path)
-        if "transcript_id" in raw.columns:
-            df = raw.set_index("transcript_id")
-        else:
-            df = pd.read_csv(path, index_col=0)
-
-        df = df.select_dtypes(include="number").fillna(0)
-        if df.empty:
-            return df
-        return remove_constant_features(df)
-
-    te = _load_df(te_path, "TE")
-    nbd = _load_df(nbd_path, "NBD")
-    return te, nbd
+def _numeric_clean(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep numeric columns, fillna(0), drop constants (RF pipeline requirement)."""
+    if df.empty:
+        return df
+    df = df.select_dtypes(include="number").fillna(0)
+    return remove_constant_features(df) if not df.empty else df
 
 
 def build_feature_matrix(
@@ -285,8 +268,7 @@ def build_feature_matrix(
     results_dir,
     features_df,
     binary,
-    te_feats,
-    nbd_feats,
+    supplementary,
     feature_mode,
     cluster_file,
     cluster_threshold,
@@ -332,12 +314,10 @@ def build_feature_matrix(
 
     # ── join supplementary features ───────────────────────────────────────────
     all_feat = fold_features.copy()
-    if not te_feats.empty:
-        all_feat = all_feat.join(te_feats, how="left")
-    if not nbd_feats.empty:
-        all_feat = all_feat.join(nbd_feats, how="left", rsuffix="_nbd")
+    if not supplementary.empty:
+        all_feat = all_feat.join(supplementary, how="left", rsuffix="_supp")
         all_feat.drop(
-            columns=[c for c in all_feat.columns if c.endswith("_nbd")],
+            columns=[c for c in all_feat.columns if c.endswith("_supp")],
             inplace=True,
         )
     all_feat = all_feat.fillna(0)
@@ -512,7 +492,14 @@ def main():
     binary = dataset["binary"]
 
     print(f"[rfecv] Loading supplementary features…")
-    te_feats, nbd_feats = load_supplementary(args.te_features, args.nbd_features)
+    supplementary = pd.read_csv(args.supplementary_features, sep="\t", index_col=0)
+    supplementary = _numeric_clean(supplementary)
+
+    # supplementary.index is already the coverage-checked clean set
+    clean_index = features_df.index.intersection(supplementary.index)
+    features_df = features_df.loc[clean_index]
+    binary = binary.loc[binary.index.isin(clean_index)]
+    supplementary = supplementary.loc[supplementary.index.isin(clean_index)]
 
     print(
         f"[rfecv] Building feature matrix (fold {args.fold}, "
@@ -524,8 +511,7 @@ def main():
         args.results_dir,
         features_df,
         binary,
-        te_feats,
-        nbd_feats,
+        supplementary,
         args.feature_mode,
         args.cluster_file,
         args.cluster_threshold,

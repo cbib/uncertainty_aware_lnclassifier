@@ -84,16 +84,11 @@ def parse_args():
         "--cluster-file and implies --feature-mode filtered.",
     )
 
-    # Supplementary feature files
+    # Merged supplementary features
     p.add_argument(
-        "--te-features",
-        default="",
-        help="Path to TE features CSV (optional)",
-    )
-    p.add_argument(
-        "--nbd-features",
-        default="",
-        help="Path to non-B-DNA features CSV (optional)",
+        "--supplementary-features",
+        required=True,
+        help="Path to merged supplementary features TSV (output of merge_supplementary_features.py)",
     )
 
     # SHAP / RF parameters
@@ -131,47 +126,19 @@ def _max_transcripts(val: str):
     return int(val)
 
 
-def load_supplementary_features(te_path: str, nbd_path: str):
-    def _load_df(path: str, label: str) -> pd.DataFrame:
-        if not path:
-            print(f"[supplementary] {label}: disabled")
-            return pd.DataFrame()
-
-        p = Path(path)
-        if not p.exists():
-            print(f"[supplementary] {label}: not found at {path} — skipping")
-            return pd.DataFrame()
-
-        raw = pd.read_csv(path)
-        if "transcript_id" in raw.columns:
-            df = raw.set_index("transcript_id")
-        else:
-            # Fallback for files already indexed by transcript ID.
-            df = pd.read_csv(path, index_col=0)
-
-        # Convert boolean/object True-False columns to int (0/1)
-        # leaving non-boolean columns unchanged
-        bool_like = df.select_dtypes(include=["object", "bool"])
-        if not bool_like.empty:
-            bool_map = {True: 1, False: 0, "True": 1, "False": 0}
-            df[bool_like.columns] = bool_like.apply(
-                lambda s: pd.to_numeric(s.map(bool_map), errors="ignore")
-            )
-
-        # Keep only numeric, fill NaNs with 0, and remove constant features
-        df = df.select_dtypes(include="number")
-        df = df.fillna(0)
-        if df.empty:
-            return df
-        df = remove_constant_features(df)
-
-        # We also remove transcript_length, as it is already encoded by RNA_size_feelnc
-        df = df.drop(columns=["transcript_length"], errors="ignore")
+def _numeric_clean(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert bool/object True-False to int, keep numeric columns, fillna(0), drop constants."""
+    if df.empty:
         return df
-
-    te = _load_df(te_path, "TE")
-    nbd = _load_df(nbd_path, "NBD")
-    return te, nbd
+    bool_like = df.select_dtypes(include=["object", "bool"])
+    if not bool_like.empty:
+        bool_map = {True: 1, False: 0, "True": 1, "False": 0}
+        df = df.copy()
+        df[bool_like.columns] = bool_like.apply(
+            lambda s: pd.to_numeric(s.map(bool_map), errors="ignore")
+        )
+    df = df.select_dtypes(include="number").fillna(0)
+    return remove_constant_features(df) if not df.empty else df
 
 
 def build_fold_features(
@@ -180,8 +147,7 @@ def build_fold_features(
     results_dir,
     features_df,
     binary,
-    te_feats,
-    nbd_feats,
+    supplementary,
     feature_mode,
     top_feats,
 ):
@@ -230,15 +196,12 @@ def build_fold_features(
 
     # ── join supplementary features ───────────────────────────────────────────
     print(f"[fold {fold_i}] Joining supplementary features…")
-    print(f"[fold {fold_i}]   TE features: {te_feats.shape[1]} cols")
-    print(f"[fold {fold_i}]   NBD features: {nbd_feats.shape[1]} cols")
+    print(f"[fold {fold_i}]   Supplementary features: {supplementary.shape[1]} cols")
     all_feat = fold_features.copy()
-    if not te_feats.empty:
-        all_feat = all_feat.join(te_feats, how="left")
-    if not nbd_feats.empty:
-        all_feat = all_feat.join(nbd_feats, how="left", rsuffix="_nbd")
+    if not supplementary.empty:
+        all_feat = all_feat.join(supplementary, how="left", rsuffix="_supp")
         all_feat.drop(
-            columns=[c for c in all_feat.columns if c.endswith("_nbd")],
+            columns=[c for c in all_feat.columns if c.endswith("_supp")],
             inplace=True,
         )
     all_feat = all_feat.fillna(0)
@@ -340,12 +303,15 @@ def main():
     binary = dataset["binary"]
 
     print(f"[fold {args.fold}] Loading supplementary features…")
-    te_feats, nbd_feats = load_supplementary_features(
-        args.te_features, args.nbd_features
-    )
-    print(
-        f"[fold {args.fold}]   TE={te_feats.shape[1]} cols, NBD={nbd_feats.shape[1]} cols"
-    )
+    supplementary = pd.read_csv(args.supplementary_features, sep="\t", index_col=0)
+    supplementary = _numeric_clean(supplementary)
+
+    # supplementary.index is already the coverage-checked clean set
+    clean_index = features_df.index.intersection(supplementary.index)
+    features_df = features_df.loc[clean_index]
+    binary = binary.loc[binary.index.isin(clean_index)]
+    supplementary = supplementary.loc[supplementary.index.isin(clean_index)]
+    print(f"[fold {args.fold}]   Supplementary features: {supplementary.shape[1]} cols")
 
     # ── feature list: consensus JSON takes priority over cluster-file ─────────
     top_feats = None
@@ -407,8 +373,7 @@ def main():
         args.results_dir,
         features_df,
         binary,
-        te_feats,
-        nbd_feats,
+        supplementary,
         args.feature_mode,
         top_feats,
     )

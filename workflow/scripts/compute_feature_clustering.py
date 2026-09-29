@@ -18,8 +18,7 @@ Usage:
     python compute_feature_clustering.py \\
         --dataset gencode.v47.common.cdhit.cv   \\
         --output-dir results/gencode.v47.common.cdhit.cv/clustering \\
-        --te-features  te_pipeline/results/.../all_transcripts_te_features.csv \\
-        --nbd-features nonb-pipeline/results/.../features_nonb_features.csv
+        --supplementary-features results/gencode.v47.common.cdhit.cv/features/supplementary_features.tsv
 """
 
 import argparse
@@ -45,6 +44,7 @@ from utils.features import (  # noqa: E402
     filter_feature_columns,
     get_categorical_and_continuous_columns,
 )
+from utils.plotting import color_feature_ticklabels, feature_label  # noqa: E402
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
@@ -66,16 +66,10 @@ def parse_args():
         help="Directory where the three output files will be written.",
     )
     p.add_argument(
-        "--te-features",
-        default=None,
-        metavar="CSV",
-        help="Path to TE pipeline feature CSV (optional; skip if not available).",
-    )
-    p.add_argument(
-        "--nbd-features",
-        default=None,
-        metavar="CSV",
-        help="Path to Non-B DNA feature CSV (optional; skip if not available).",
+        "--supplementary-features",
+        required=True,
+        metavar="TSV",
+        help="Path to merged supplementary features TSV (output of merge_supplementary_features.py).",
     )
     p.add_argument(
         "--distance-min",
@@ -123,64 +117,36 @@ def parse_args():
     return p.parse_args()
 
 
-# ── Loading helpers ─────────────────────────────────────────────────────────────
-
-
-def _try_load(
-    path_str: str | None, sep: str = ",", label: str = ""
-) -> pd.DataFrame | None:
-    """Load a CSV/TSV file if path is given and file exists, else return None."""
-    if not path_str:
-        return None
-    p = Path(path_str)
-    if not p.exists():
-        print(f"⚠  {label} not found at {p} — skipping.")
-        return None
-    df = pd.read_csv(p, sep=sep, index_col=0)
-    print(f"✓  Loaded {label}: {df.shape[0]:,} rows × {df.shape[1]} cols")
-    return df
-
-
 # ── Feature assembly ────────────────────────────────────────────────────────────
 
 
 def build_full_feature_set(
     features: pd.DataFrame,
-    te_df: pd.DataFrame | None,
-    nbd_df: pd.DataFrame | None,
+    supplementary: pd.DataFrame,
     index: pd.Index,
 ) -> pd.DataFrame:
     """
-    Concatenate main features with TE and NBD supplementary features.
+    Concatenate main features with the merged supplementary features.
 
     Steps:
-        1. Reindex all DataFrames to the common transcript index.
+        1. Reindex both DataFrames to the common transcript index.
         2. Concatenate along columns.
         3. Drop duplicated column names (keep first occurrence).
         4. Fill NaNs with 0 (expected for absent feature indicators).
         5. Convert everything to numeric (bool/object → 0/1).
         6. Drop constant columns (nunique ≤ 1).
     """
-    parts = [features.loc[index]]
-    if te_df is not None:
-        te_aligned = te_df.reindex(index).fillna(0)
-        parts.append(te_aligned)
-    if nbd_df is not None:
-        nbd_aligned = nbd_df.reindex(index).fillna(0)
-        # Align with notebook rename
-        if "motif_types_present" in nbd_aligned.columns:
-            nbd_aligned = nbd_aligned.rename(
-                columns={"motif_types_present": "n_motif_types"}
-            )
-        parts.append(nbd_aligned)
+    supplementary_aligned = supplementary.reindex(index).fillna(0)
+    # Align with notebook rename
+    if "motif_types_present" in supplementary_aligned.columns:
+        supplementary_aligned = supplementary_aligned.rename(
+            columns={"motif_types_present": "n_motif_types"}
+        )
 
-    full = pd.concat(parts, axis=1)
+    full = pd.concat([features.loc[index], supplementary_aligned], axis=1)
     full = full.loc[:, ~full.columns.duplicated(keep="first")]
     full.fillna(0, inplace=True)
     full = full.apply(pd.to_numeric, errors="coerce")
-
-    # Drop transcript_length feature. RNA_sice_feelnc already captures length info
-    full.drop(columns=["transcript_length"], inplace=True)
 
     numeric_cols = full.select_dtypes(include=[np.number]).columns
     print(
@@ -283,21 +249,22 @@ def main():
     print(f"  Transcripts : {len(index):,}")
     print(f"  Core features: {features_filtered.shape[1]}")
 
-    # ── 2. Load supplementary features ────────────────────────────────────────
-    te_df = _try_load(args.te_features, sep=",", label="TE features")
-    nbd_df = _try_load(args.nbd_features, sep=",", label="NBD features")
+    # ── 2. Load merged supplementary features ─────────────────────────────────
+    print("\n── Loading supplementary features ──")
+    supplementary = pd.read_csv(args.supplementary_features, sep="\t", index_col=0)
+    index = index.intersection(supplementary.index)
 
     # ── 3. Assemble and clean feature matrix ──────────────────────────────────
     print("\n── Assembling full feature set ──")
-    full = build_full_feature_set(features_filtered, te_df, nbd_df, index)
+    full = build_full_feature_set(features_filtered, supplementary, index)
 
-    # ── 4. Separate continuous vs categorical ─────────────────────────────────
+    # ── 5. Separate continuous vs categorical ─────────────────────────────────
     print("\n── Separating continuous / categorical ──")
     cat_cols, cont_cols = get_categorical_and_continuous_columns(full)
-    _continuous_df = full[cont_cols]
-    _categorical_df = full[cat_cols]
+    continuous_df = full[cont_cols]
+    categorical_df = full[cat_cols]
 
-    # ── 5. Correlation matrix ─────────────────────────────────────────────────
+    # ── 6. Correlation matrix ─────────────────────────────────────────────────
     print(
         f"\n── Computing {args.corr_method} correlation matrix "
         f"({continuous_df.shape[1]} continuous features) ──"
@@ -361,7 +328,16 @@ def main():
     optimal_threshold.write_text(f"{best_dist:.4f}\n")
     print(f"✓ Saved: {optimal_threshold}")
 
-    # ── 8. Silhouette score plot ───────────────────────────────────────────────
+    # ── 8. Cluster membership table at optimal threshold ──────────────────────
+    membership_csv = out_dir / "feature_cluster_membership.csv"
+    opt_col = f"cluster_{best_dist:.2f}"
+    membership = cluster_df[[opt_col]].rename(columns={opt_col: "cluster_id"}).copy()
+    rep_map = membership.reset_index().groupby("cluster_id")["feature"].first()
+    membership["cluster_representative"] = membership["cluster_id"].map(rep_map)
+    membership.to_csv(membership_csv, index_label="feature")
+    print(f"✓ Saved: {membership_csv}")
+
+    # ── 9. Silhouette score plot ───────────────────────────────────────────────
     silhouette_plot = out_dir / "silhouette_scores.pdf"
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.plot(
@@ -389,16 +365,20 @@ def main():
     plt.close(fig)
     print(f"✓ Saved: {silhouette_plot}")
 
-    # ── 9. Dendrogram (using optimal or explicit threshold) ────────────────────
+    # ── 10. Dendrogram (using optimal or explicit threshold) ───────────────────
     print(f"\n── Plotting dendrogram (threshold={dendrogram_thresh:.2f}) ──")
     fig, ax = plt.subplots(figsize=(5, 40))
-    hierarchy.dendrogram(
+    dn = hierarchy.dendrogram(
         dist_linkage,
         labels=corr_matrix.columns.tolist(),
         ax=ax,
         orientation="left",
         color_threshold=dendrogram_thresh,
     )
+    # Readable, prefix-aware leaf labels coloured by rna/dna group (dn["ivl"] is
+    # the drawn leaf order, matching the y tick labels bottom-to-top).
+    ax.set_yticklabels([feature_label(n)[0] for n in dn["ivl"]])
+    color_feature_ticklabels(ax, dn["ivl"], axis="y")
     ax.axvline(
         dendrogram_thresh,
         color="red",

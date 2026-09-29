@@ -443,6 +443,60 @@ def create_binary_classification_table(simple_class_df: pd.DataFrame) -> pd.Data
     return binary_df
 
 
+def create_dropout_report(simple_class_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Build a per-transcript report explaining why each transcript was excluded
+    from the binary classification table.
+
+    A transcript is excluded when at least one tool produced no output for it
+    (NaN label column).  The report names those tools so the cause is
+    traceable without re-running the pipeline.
+
+    Parameters
+    ----------
+    simple_class_df : pd.DataFrame
+        Output of create_simple_classification_table() — index = seq_ID,
+        columns include label_<tool> and biotype.
+
+    Returns
+    -------
+    pd.DataFrame with columns:
+        seq_ID         (index)
+        biotype
+        missing_tools  – comma-separated tool names that had no output
+        n_missing      – how many tools were missing
+        reason         – human-readable summary
+    """
+    label_cols = [c for c in simple_class_df.columns if c.startswith("label_")]
+    nan_mask = simple_class_df[label_cols].isna()
+    dropped = simple_class_df[nan_mask.any(axis=1)].copy()
+
+    tool_names = [c.removeprefix("label_") for c in label_cols]
+    nan_flags = nan_mask.loc[dropped.index]
+    nan_flags.columns = tool_names
+
+    missing_tools = nan_flags.apply(
+        lambda row: ",".join(t for t, v in zip(tool_names, row) if v), axis=1
+    )
+    n_missing = nan_flags.sum(axis=1)
+
+    report = pd.DataFrame(
+        {
+            "biotype": dropped.get("biotype", pd.Series(dtype=str)),
+            "missing_tools": missing_tools,
+            "n_missing": n_missing,
+            "reason": missing_tools.apply(lambda tools: f"No output from: {tools}"),
+        },
+        index=dropped.index,
+    )
+    report.index.name = "seq_ID"
+    logger.info(
+        f"  Dropout report: {len(report)} transcripts excluded "
+        f"(tools: {', '.join(t for t in tool_names if nan_flags[t].any())})"
+    )
+    return report
+
+
 def create_all_tables(
     df: pd.DataFrame, pc_ids: list[str], lnc_ids: list[str], output_prefix: str
 ) -> dict[str, pd.DataFrame]:

@@ -48,7 +48,8 @@ rule lncrnabert_train:
     resources:
         mem_mb=25000,
         slurm_partition="gpu",
-        gres=gpu_helpers.get_gpu_for_rule_name("lncrnabert_train"),
+        #gres=gpu_helpers.get_gpu_for_rule_name("lncrnabert_train"),
+        gres="gpu:nvidia_h100_nvl_1g.24gb:1",
         cpus_per_gpu=1,
     conda:
         "lncrnabert"

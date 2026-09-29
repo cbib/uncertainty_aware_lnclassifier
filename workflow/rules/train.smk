@@ -75,7 +75,7 @@ rule get_cds_from_dataset:
     log:
         "logs/{expt}/datasets/get_cds_from_dataset_{fold}.log"
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     script:
         "../scripts/get_cds_from_ids.py"
 
@@ -188,7 +188,7 @@ rule filter_cds_with_ss:
     log:
         "logs/{expt}/datasets/{fold}/filter_cds_with_ss_{fold}.log"
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     script:
         "../scripts/filter_cds_with_ss.py"
 
@@ -208,7 +208,7 @@ use rule lncDC_train as lncDC_train_with_precomputed_ss with:
     log:
         "logs/{expt}/training/{fold}/lncDC/train_{fold}_ss.log"
     params:
-        extra="-r -ss-file"
+        extra="-r --ss_file"
 
 
 rule diamond_makedb_train:

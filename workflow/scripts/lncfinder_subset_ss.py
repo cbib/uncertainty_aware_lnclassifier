@@ -19,7 +19,7 @@ out_file = snakemake.output["out"]
 # Load the IDs from the subset FASTA
 # NOTE: LncFinder replaces '|' and '-' with '.' in their IDs
 fasta_ids = simple_load_ids(fasta)
-fasta_ids = [i.replace("|", ".").replace("-", ".") for i in fasta_ids]
+fasta_ids = [i.replace("|", ".").replace("-", ".").replace(":", ".") for i in fasta_ids]
 
 # Index the large reference FASTA into a dict
 ss_dict = {}

@@ -292,4 +292,260 @@ def reduce_dimensions_pca(scaled_features, variance_explained=0.95, random_state
     print(f"PCA reduced features to {features_pca.shape[1]} dimensions")
     print(f"Explained variance ratio: {pca.explained_variance_ratio_.sum():.4f}")
 
-    return features_pca, pca
+
+# ============================================================================
+# SUPPLEMENTARY PIPELINE COVERAGE CHECK
+# ============================================================================
+
+
+TRACE_COLS = ["category", "pipeline", "detail"]
+
+
+def _trace_rows(
+    idx: pd.Index, category: str, pipeline: str, detail: str
+) -> pd.DataFrame:
+    """One long-format traceability block: rows in `idx`, all sharing category/pipeline/detail."""
+    return pd.DataFrame(
+        {"category": category, "pipeline": pipeline, "detail": detail},
+        index=pd.Index(idx, name="seq_ID"),
+    )
+
+
+def build_supplementary_traceability(
+    main_index: pd.Index,
+    pipeline_dfs: dict[str, pd.DataFrame],
+) -> tuple[pd.Index, pd.DataFrame]:
+    """
+    Build a full data-traceability report for the supplementary feature merge.
+
+    Every transcript that is *not* carried into the clean merged matrix is
+    recorded with an explicit reason, so nothing is silently dropped or
+    zero-imputed.  Three categories are distinguished:
+
+    ``missing_from_pipeline``
+        A main-index transcript is absent from an active pipeline.  Zero-imputing
+        its features (the old downstream ``fillna(0)`` behaviour) biases effect
+        sizes toward zero, so it is excluded from the clean set instead.
+    ``not_in_main_index``
+        A pipeline supplies a transcript that is absent from the main analysis
+        set.  Informational — it was never eligible and is dropped from the merge.
+    ``invalid_data``
+        A main-index transcript is present in a pipeline but carries missing or
+        non-numeric feature values; it is excluded rather than coerced to zero.
+
+    Parameters
+    ----------
+    main_index : pd.Index
+        Transcript IDs in the main analysis set.
+    pipeline_dfs : dict[str, pd.DataFrame]
+        Mapping of pipeline label → loaded feature DataFrame.  Empty DataFrames
+        (not configured / not found) are skipped.
+
+    Returns
+    -------
+    clean_index : pd.Index
+        Main transcripts present with valid data in every active pipeline.
+    report : pd.DataFrame
+        Long-format, one row per (transcript, issue); indexed by seq_ID with
+        columns ``category``, ``pipeline``, ``detail``.  Empty (with those
+        columns) when nothing is dropped.
+    """
+    active = {name: df for name, df in pipeline_dfs.items() if len(df) > 0}
+    empty_report = pd.DataFrame(columns=TRACE_COLS)
+    empty_report.index.name = "seq_ID"
+
+    if not active:
+        return main_index, empty_report
+
+    parts: list[pd.DataFrame] = []
+    excluded_main = main_index[:0]  # empty, same dtype — main transcripts to drop
+
+    for name, df in active.items():
+        # pd.Index.isin is hash-based (ms); np.isin on string arrays falls back to a
+        # sort-based path costing >90s per call — keep isin on the hot path.
+
+        # (1) main transcripts absent from this pipeline
+        missing = main_index[~main_index.isin(df.index)]
+        if len(missing):
+            parts.append(
+                _trace_rows(
+                    missing,
+                    "missing_from_pipeline",
+                    name,
+                    f"Absent from pipeline '{name}'",
+                )
+            )
+            excluded_main = excluded_main.union(missing)
+
+        # (2) pipeline transcripts absent from the main index (never eligible)
+        extra = pd.Index(df.index[~df.index.isin(main_index)]).unique()
+        if len(extra):
+            parts.append(
+                _trace_rows(
+                    extra,
+                    "not_in_main_index",
+                    name,
+                    f"Present in pipeline '{name}' but absent from main index",
+                )
+            )
+
+        # (3) main transcripts present here but with missing/non-numeric values
+        present = df.index.intersection(main_index)
+        # ponytail: feature matrices are numeric; to_numeric(coerce)+isna catches both
+        # NaN and stray non-numeric strings. If a column is ever legitimately categorical
+        # this over-flags — narrow to that column's dtype then.
+        numeric = df.loc[present].apply(pd.to_numeric, errors="coerce")
+        bad = present[numeric.isna().any(axis=1).to_numpy()]
+        if len(bad):
+            parts.append(
+                _trace_rows(
+                    bad,
+                    "invalid_data",
+                    name,
+                    f"Missing/non-numeric feature value(s) in pipeline '{name}'",
+                )
+            )
+            excluded_main = excluded_main.union(pd.Index(bad))
+
+    clean_index = main_index[~main_index.isin(excluded_main)]
+
+    if not parts:
+        return clean_index, empty_report
+
+    report = pd.concat(parts)
+    counts = report.groupby("category").size().to_dict()
+    print(
+        f"⚠ Traceability: {len(clean_index):,}/{len(main_index):,} main transcripts kept; "
+        + ", ".join(f"{k}={v}" for k, v in counts.items())
+    )
+    return clean_index, report
+
+
+# ============================================================================
+# SUPPLEMENTARY PIPELINE LOADER
+# ============================================================================
+
+
+def _read_pipeline_file(path: str, sep: str = ",", label: str = "") -> pd.DataFrame:
+    """Read a supplementary pipeline CSV/TSV; return empty DataFrame if path is falsy or missing."""
+    from pathlib import (  # local import — utils/features.py has no top-level Path import
+        Path,
+    )
+
+    if not path:
+        return pd.DataFrame()
+    p = Path(path)
+    if not p.exists():
+        print(f"⚠  {label}: not found at {p} — skipping")
+        return pd.DataFrame()
+    df = pd.read_csv(p, sep=sep, index_col=0)
+    # Some pipeline outputs use transcript_id as a column rather than the index
+    if "transcript_id" in df.columns:
+        df = df.set_index("transcript_id")
+    print(f"   {label}: {df.shape[0]:,} rows × {df.shape[1]} cols")
+    return df
+
+
+def _clean_supplementary(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop non-feature label/ID columns and coerce presence flags to 0/1.
+
+    ``transcript_type``/``coding_class`` are string metadata and the per-motif
+    ``*_transcript_id`` columns are IDs — none are numeric features. Left in, they
+    coerce to all-NaN and flag every transcript as ``invalid_data`` (emptying the
+    merge). ``*_has_*`` presence flags are stored True/False/NaN where NaN means the
+    element is absent (= 0), not a data gap — coerce them to int so 0 is the true
+    value rather than a dropped transcript.
+    """
+    drop = [
+        c
+        for c in df.columns
+        if c in ("transcript_type", "coding_class") or c.endswith("_transcript_id")
+    ]
+    df = df.drop(columns=drop)
+    flags = df.columns[df.columns.str.contains("_has_")]
+    if len(flags):
+        df[flags] = (
+            df[flags].apply(pd.to_numeric, errors="coerce").fillna(0).astype("int8")
+        )
+    return df
+
+
+def load_supplementary_features(
+    te_rna_path: str = "",
+    te_dna_path: str = "",
+    nbd_path: str = "",
+    scanfold_path: str = "",
+    rg4_path: str = "",
+) -> dict[str, pd.DataFrame]:
+    """
+    Load supplementary pipeline feature files, applying per-pipeline index and
+    column transformations.
+
+    Drops non-feature label/ID columns and converts ``*_has_*`` presence flags to
+    0/1 (NaN = element absent = 0) via :func:`_clean_supplementary`. Does **not**
+    apply general ``fillna`` over measured features, numeric-type filtering, or
+    ``remove_constant_features`` — those differ per downstream step and remain the
+    caller's responsibility.
+
+    Parameters
+    ----------
+    te_rna_path   : path to RNA/spliced TE features CSV
+    te_dna_path   : path to DNA/unspliced TE features CSV
+    nbd_path      : path to Non-B DNA features CSV
+    scanfold_path : path to ScanFold features TSV
+    rg4_path      : path to rG4detector features CSV
+
+    Returns
+    -------
+    dict[str, pd.DataFrame]
+        Keys: ``te_rna``, ``te_dna``, ``nbd``, ``scanfold``, ``rg4``.
+        Empty DataFrame for any disabled or missing pipeline.
+        Suitable for direct use with :func:`build_supplementary_traceability`.
+
+    Per-pipeline transformations
+    ----------------------------
+    te_rna   : drops ``transcript_length``, metadata/flag-cleans, prefixes columns with ``rna_``
+    te_dna   : drops ``transcript_length`` (unspliced genomic length), metadata/flag-cleans, prefixes with ``dna_``
+    nbd      : renames ``transcript_length`` → ``unspliced_length``, metadata/flag-cleans
+    scanfold : strips ``.win*`` suffix from index; deduplicates; drops ``length``, ``source_dir``
+    rg4      : strips ``|…`` from index (keeps transcript ID only); deduplicates; drops ``transcript_length``
+    """
+    te_rna = _read_pipeline_file(te_rna_path, sep=",", label="TE RNA")
+    if not te_rna.empty:
+        te_rna.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+        te_rna = _clean_supplementary(te_rna)
+        te_rna.columns = [f"rna_{c}" for c in te_rna.columns]
+
+    te_dna = _read_pipeline_file(te_dna_path, sep=",", label="TE DNA")
+    if not te_dna.empty:
+        te_dna.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+        te_dna = _clean_supplementary(te_dna)
+        te_dna.columns = [f"dna_{c}" for c in te_dna.columns]
+
+    nbd = _read_pipeline_file(nbd_path, sep=",", label="NBD")
+    if not nbd.empty:
+        nbd.rename(columns={"transcript_length": "unspliced_length"}, inplace=True)
+        nbd = _clean_supplementary(nbd)
+
+    scanfold = _read_pipeline_file(scanfold_path, sep="\t", label="ScanFold")
+    if not scanfold.empty:
+        # Index looks like "ENST00000831533.1.win_120.stp_1.csv" — strip window suffix
+        scanfold.index = scanfold.index.str.split(".win").str[0]
+        # ponytail: keep-first dedup; TODO remove when ScanFold pipeline stops emitting duplicates
+        scanfold = scanfold[~scanfold.index.duplicated(keep="first")]
+        scanfold.drop(columns=["length", "source_dir"], errors="ignore", inplace=True)
+
+    rg4 = _read_pipeline_file(rg4_path, sep=",", label="rG4")
+    if not rg4.empty:
+        # Index looks like "ENST00000832824.1|ENSG...|..." — keep only the transcript ID
+        rg4.index = rg4.index.str.split("|").str[0]
+        rg4 = rg4[~rg4.index.duplicated(keep="first")]
+        rg4.drop(columns=["transcript_length"], errors="ignore", inplace=True)
+
+    return {
+        "te_rna": te_rna,
+        "te_dna": te_dna,
+        "nbd": nbd,
+        "scanfold": scanfold,
+        "rg4": rg4,
+    }

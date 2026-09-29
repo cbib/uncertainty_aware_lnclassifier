@@ -9,8 +9,7 @@ Usage (from paper/):
     python -u workflow/scripts/compute_embeddings.py \
         --dataset           gencode.v47.common.cdhit.cv  \
         --output-dir        results/gencode.v47.common.cdhit.cv/embeddings \
-        --te-features       te_pipeline/results/te_analysis_flexible/features/all_transcripts_te_features.csv \
-        --nbd-features      nonb-pipeline/results/gencode.v47/extended_analysis/features_nonb_features.csv \
+        --supplementary-features results/gencode.v47.common.cdhit.cv/features/supplementary_features.tsv \
         --methods           umap,tsne,pca \
         --umap-neighbors    30 \
         --umap-min-dist     0.1 \
@@ -61,16 +60,11 @@ def parse_args():
         help="Where to write embedding cache, features, and labels.",
     )
 
-    # ── Optional supplementary feature files ───────────────────────────────
+    # ── Merged supplementary features ──────────────────────────────────────
     parser.add_argument(
-        "--te-features",
-        default="",
-        help="Path to TE pipeline features CSV.  Empty = not used.",
-    )
-    parser.add_argument(
-        "--nbd-features",
-        default="",
-        help="Path to NBD pipeline features CSV.  Empty = not used.",
+        "--supplementary-features",
+        required=True,
+        help="Path to merged supplementary features TSV (output of merge_supplementary_features.py).",
     )
 
     # ── Method selection ────────────────────────────────────────────────────
@@ -158,25 +152,18 @@ def main():
         f"raw columns: {features_df.shape[1]}"
     )
 
-    # ── 2. Merge optional supplementary feature files ──────────────────────
-    for path_str, tag in [
-        (args.te_features, "TE"),
-        (args.nbd_features, "NBD"),
-    ]:
-        if not path_str:
-            continue
-        p = Path(path_str)
-        if not p.exists():
-            print(f"Warning: {tag} features file not found: {path_str} — skipping.")
-            continue
-        print(f"Loading {tag} features from {path_str} ...")
-        extra_df = pd.read_csv(
-            p,
-            sep="\t" if p.suffix == ".tsv" else ",",
-            index_col=0,
+    # ── 2. Load merged supplementary features ──────────────────────────────
+    print("\n── Loading supplementary features ──")
+    supplementary = pd.read_csv(args.supplementary_features, sep="\t", index_col=0)
+
+    # supplementary.index is already the coverage-checked clean set
+    clean_index = features_df.index.intersection(supplementary.index)
+    features_df = features_df.loc[clean_index]
+    if not supplementary.empty:
+        features_df = features_df.join(
+            supplementary.loc[clean_index], how="left", rsuffix="_supp"
         )
-        features_df = features_df.join(extra_df, how="left", rsuffix=f"_{tag.lower()}")
-        print(f"  Columns after merging {tag}: {features_df.shape[1]}")
+        print(f"  Columns after merging supplementary features: {features_df.shape[1]}")
 
     # ── 3. Filter, select numeric columns, drop constants ─────────────────
     print(f"\n{'='*60}")

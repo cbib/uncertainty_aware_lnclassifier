@@ -25,13 +25,12 @@ sys.path.insert(0, str(_WORKFLOW_DIR))
 
 import warnings
 
-from utils.entropy import (
-    load_additional_features,
-    load_dataset,
-    load_entropy_groups,
-    split_entropy_group_indices,
+from utils.entropy import load_dataset, load_entropy_groups, split_entropy_group_indices
+from utils.features import (
+    filter_feature_columns,
+    get_categorical_and_continuous_columns,
+    remove_constant_features,
 )
-from utils.features import filter_feature_columns, remove_constant_features
 from utils.stats import compute_pairwise_stats
 
 warnings.filterwarnings("ignore")
@@ -43,10 +42,13 @@ def setup_logging(verbose=True):
         print("✓ Imports successful", file=sys.stderr)
 
 
-def prepare_features(features, te_features, nbd_features, verbose=True):
+def prepare_features(features, supplementary, verbose=True):
     """Combine and preprocess all feature sets."""
-    combined = pd.concat([features, te_features, nbd_features], axis=1)
+    combined = pd.concat([features, supplementary], axis=1)
     combined = combined.loc[:, ~combined.columns.duplicated(keep="first")]
+    # ponytail: fillna(0) kept only for intra-pipeline NaN (e.g. a feature that could
+    # not be computed for a present transcript); cross-pipeline absence is handled
+    # upstream by build_pipeline_exclusion_report before this function is called.
     combined.fillna(0, inplace=True)
     combined = combined.apply(pd.to_numeric, errors="coerce")
 
@@ -58,7 +60,9 @@ def prepare_features(features, te_features, nbd_features, verbose=True):
     cat_cols, continuous_cols = get_categorical_and_continuous_columns(full_feature_set)
 
     categorical_features = full_feature_set[cat_cols] if cat_cols else pd.DataFrame()
-    scalar_features = full_feature_set[scalar_cols] if scalar_cols else pd.DataFrame()
+    continuous_features = (
+        full_feature_set[continuous_cols] if continuous_cols else pd.DataFrame()
+    )
 
     if verbose:
         print(f"  Continuous features: {len(continuous_cols)}", file=sys.stderr)
@@ -282,14 +286,9 @@ def parse_arguments():
         help="Path to persisted entropy groups TSV (output of compute_entropy_groups.py)",
     )
     parser.add_argument(
-        "--te-features",
-        default="",
-        help="Path to TE features (optional)",
-    )
-    parser.add_argument(
-        "--nbd-features",
-        default="",
-        help="Path to NBD features (optional)",
+        "--supplementary-features",
+        required=True,
+        help="Path to merged supplementary features TSV (output of merge_supplementary_features.py)",
     )
     parser.add_argument(
         "--cluster-file",
@@ -330,28 +329,23 @@ def main():
     # Load main dataset
     print(f"Loading dataset: {dataset_name}", file=sys.stderr)
     dataset = load_dataset(dataset_name)
-    pipelines = {
-        "te_pipeline": args.te_features or None,
-        "nbd_pipeline": args.nbd_features or None,
-    }
-    dataset.update(
-        load_additional_features(
-            dataset_name,
-            basedir,
-            pipelines=pipelines,
-        )
-    )
 
     probs = dataset["probs"]
     labels = dataset["labels"]
     features = dataset["features"]
     features_to_keep = filter_feature_columns(features)
     features = features[features_to_keep]
-    te_features = dataset.get("te_pipeline", pd.DataFrame()).fillna(0)
-    nbd_features = dataset.get("nbd_pipeline", pd.DataFrame()).fillna(0)
 
-    if te_features.empty or nbd_features.empty:
-        print("⚠ Some feature sets not loaded", file=sys.stderr)
+    # Load pre-merged, pre-cleaned supplementary pipeline features
+    print("Loading supplementary features…", file=sys.stderr)
+    supplementary = pd.read_csv(args.supplementary_features, sep="\t", index_col=0)
+
+    # supplementary.index is already the coverage-checked clean set
+    clean_index = features.index.intersection(supplementary.index)
+    features = features.loc[clean_index]
+    probs = probs.loc[clean_index]
+    labels = labels.loc[clean_index]
+    supplementary = supplementary.loc[clean_index]
 
     # Load entropy metrics
     entropy_df = pd.read_csv(args.entropy_tsv, sep="\t", index_col=0)
@@ -370,7 +364,9 @@ def main():
     # Prepare features
     print("Preparing features...", file=sys.stderr)
     categorical_features, scalar_features = prepare_features(
-        features, te_features, nbd_features, verbose=args.verbose
+        features,
+        supplementary,
+        verbose=args.verbose,
     )
 
     cluster_df_subset = load_cluster_assignments(

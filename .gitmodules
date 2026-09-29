@@ -4,3 +4,6 @@
 [submodule "nonb-pipeline"]
 	path = nonb-pipeline
 	url = https://github.com/cbib/nbd_extraction_pipeline
+[submodule "secondrna"]
+	path = secondrna
+	url = https://github.com/dgruano/secondrna.git

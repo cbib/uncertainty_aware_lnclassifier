@@ -54,7 +54,7 @@ rule entropy_analysis_figures:
         mem_mb  = 4000,
         runtime  = 120,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/plot_entropy_analysis.py \

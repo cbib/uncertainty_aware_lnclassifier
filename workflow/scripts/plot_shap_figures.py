@@ -63,6 +63,7 @@ from utils.entropy_figures import (  # noqa: E402
     FEATURE_LABEL_DICT,
     FEATURE_LABEL_DICT_SHAP,
 )
+from utils.plotting import color_feature_ticklabels, feature_label  # noqa: E402
 
 FEATURE_LABEL_DICT.update(FEATURE_LABEL_DICT_SHAP)
 
@@ -138,7 +139,7 @@ def load_shap_data(shap_dir: Path, n_folds: int) -> dict:
 def plot_shap_importance(shap_agg: pd.DataFrame, top_n: int, output_dir: Path) -> None:
     """Bar chart of mean |SHAP value| ± std across folds."""
     top = shap_agg.head(top_n).iloc[::-1].copy()
-    top["label"] = top.index.map(lambda x: FEATURE_LABEL_DICT.get(x, x))
+    top["label"] = top.index.map(lambda x: feature_label(x)[0])
 
     w_cm = 14
     h_cm = top_n * 0.4 + 1.5
@@ -162,6 +163,7 @@ def plot_shap_importance(shap_agg: pd.DataFrame, top_n: int, output_dir: Path) -
     ax.xaxis.set_major_locator(mticker.MultipleLocator(0.01))
     ax.xaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
     ax.tick_params(axis="x", labelsize=6)
+    color_feature_ticklabels(ax, top.index.tolist(), axis="y")
     plt.tight_layout()
     _save(fig, output_dir / "shap_importance_mean_std")
 
@@ -180,7 +182,7 @@ def plot_shap_cumulative(
         .rename_axis("feature")
         .reset_index(name="mean_abs_shap")
     )
-    cum["feature_label"] = cum["feature"].map(lambda f: FEATURE_LABEL_DICT.get(f, f))
+    cum["feature_label"] = cum["feature"].map(lambda f: feature_label(f)[0])
     cum["step"] = np.arange(1, len(cum) + 1)
     cum["cum_abs_shap"] = cum["mean_abs_shap"].cumsum()
     cum["cum_pct"] = 100 * cum["cum_abs_shap"] / cum["mean_abs_shap"].sum()
@@ -217,6 +219,7 @@ def plot_shap_cumulative(
     ax1.set_ylabel("Incremental mean |SHAP|", fontsize=8)
     ax1.set_xticks(sub["step"])
     ax1.set_xticklabels(sub["feature_label"], rotation=65, ha="right", fontsize=6)
+    color_feature_ticklabels(ax1, sub["feature"].tolist(), axis="x")
     ax1.tick_params(axis="y", labelsize=7)
     ax1.grid(axis="y", linestyle="--", alpha=0.3)
     ax2 = ax1.twinx()
@@ -247,14 +250,16 @@ def plot_shap_fold_heatmap(
     data = per_fold_abs[top_feats].T
     n_folds = per_fold_abs.shape[0]
 
-    fig, ax = plt.subplots(figsize=(n_folds * 1.4 + 2, top_n * 0.4 + 1.5), dpi=300)
+    fig, ax = plt.subplots(
+        figsize=(n_folds * 1.4 + 2, top_n * 0.4 + 1.5), dpi=300, layout="constrained"
+    )
     im = ax.imshow(data.values, aspect="auto", cmap="YlOrRd")
     ax.set_xticks(range(n_folds))
     ax.set_xticklabels(per_fold_abs.index, fontsize=9)
     ax.set_yticks(range(len(top_feats)))
-    ax.set_yticklabels([FEATURE_LABEL_DICT.get(f, f) for f in top_feats], fontsize=9)
+    ax.set_yticklabels([feature_label(f)[0] for f in top_feats], fontsize=9)
+    color_feature_ticklabels(ax, list(top_feats), axis="y")
     plt.colorbar(im, ax=ax, label="Mean |SHAP|")
-    plt.tight_layout()
     _save(fig, output_dir / "shap_fold_heatmap")
 
 
@@ -279,11 +284,12 @@ def plot_shap_beeswarm(
     expl = shap.Explanation(
         values=sv_mat,
         data=x_mat,
-        feature_names=[FEATURE_LABEL_DICT.get(f, f) for f in top_feats],
+        feature_names=[feature_label(f)[0] for f in top_feats],
     )
     fig = plt.figure(figsize=(10, 6), dpi=300)
     shap.plots.beeswarm(expl, show=False)
-    plt.tight_layout()
+    # shap's beeswarm adds its own colorbar/layout engine; tight_layout would
+    # error on it. _save already crops with bbox_inches="tight".
     _save(fig, output_dir / "shap_beeswarm_all_transcripts")
 
 
@@ -304,6 +310,7 @@ def plot_shap_prob_distribution(all_preds: pd.DataFrame, output_dir: Path) -> No
 
 
 # ── Figures 14–17: SHAP waterfall ─────────────────────────────────────────────
+# TODO: Make this configurable via CLI instead of hard-coded
 _CHERRY_PICK = {
     "low_entropy_coding": ("ENST00000265171", "EGF"),
     "low_entropy_lncrna": ("ENST00000710946", "MALAT1"),
@@ -348,7 +355,7 @@ def plot_shap_waterfalls(
         shap_s = res["shap_df"].loc[full_id]
         x_row = res["X_test"].loc[full_id]
 
-        readable = [FEATURE_LABEL_DICT.get(f, f) for f in shap_s.index]
+        readable = [feature_label(f)[0] for f in shap_s.index]
         expl = shap.Explanation(
             values=shap_s.values,
             base_values=res["base_val"],

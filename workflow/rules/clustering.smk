@@ -38,16 +38,6 @@ def _clust_sub(wc):
     return config["feature_analysis"][wc.expt].get("clustering", {})
 
 
-def _opt_path(path):
-    """Return [] for null/empty paths so Snakemake does not treat them as required inputs."""
-    return [path] if path else []
-
-
-def _opt_arg(flag, path):
-    """Build optional CLI args for nullable config paths."""
-    return f"{flag} '{path}'" if path else ""
-
-
 # ── Aggregate targets ──────────────────────────────────────────────────────────
 
 _clustering_all_targets = [
@@ -71,12 +61,12 @@ rule feature_clustering:
       - silhouette_scores.csv               : silhouette score + n_clusters at each threshold
       - silhouette_scores.pdf               : silhouette score curve with optimal threshold marked
       - optimal_threshold.txt               : single-line file with the optimal distance value
+      - feature_cluster_membership.csv      : feature → cluster_id + representative at optimal threshold
     """
     input:
-        full_table  = "results/{expt}/tables/{expt}_full_table.tsv",
-        binary      = "results/{expt}/tables/{expt}_binary_class_table.tsv",
-        te          = lambda wc: _opt_path(_clust_cfg(wc).get("te_features")),
-        nbd         = lambda wc: _opt_path(_clust_cfg(wc).get("nbd_features")),
+        full_table    = "results/{expt}/tables/{expt}_full_table.tsv",
+        binary        = "results/{expt}/tables/{expt}_binary_class_table.tsv",
+        supplementary = "results/{expt}/features/supplementary_features.tsv",
     output:
         corr_matrix       = "results/{expt}/features/clustering/feature_correlation_matrix.csv",
         dendrogram        = "results/{expt}/features/clustering/feature_correlation_dendrogram.pdf",
@@ -84,12 +74,10 @@ rule feature_clustering:
         silhouette_csv    = "results/{expt}/features/clustering/silhouette_scores.csv",
         silhouette_pdf    = "results/{expt}/features/clustering/silhouette_scores.pdf",
         optimal_threshold = "results/{expt}/features/clustering/optimal_threshold.txt",
+        membership        = "results/{expt}/features/clustering/feature_cluster_membership.csv",
     params:
         output_dir   = lambda wc: f"results/{wc.expt}/features/clustering",
-        te_features  = lambda wc: _clust_cfg(wc)["te_features"],
         nbd_features = lambda wc: _clust_cfg(wc)["nbd_features"],
-        te_arg       = lambda wc: _opt_arg("--te-features", _clust_cfg(wc).get("te_features")),
-        nbd_arg      = lambda wc: _opt_arg("--nbd-features", _clust_cfg(wc).get("nbd_features")),
         corr_method  = lambda wc: _clust_sub(wc).get("corr_method", "spearman"),
         distance_min  = lambda wc: _clust_sub(wc).get("distance_min", 0.05),
         distance_max  = lambda wc: _clust_sub(wc).get("distance_max", 1.60),
@@ -101,15 +89,14 @@ rule feature_clustering:
         mem_mb  = 32000,
         runtime = 120,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/compute_feature_clustering.py  \
-            --dataset             {wildcards.expt}                  \
-            --output-dir          {params.output_dir}               \
-            {params.te_arg}                                       \
-            {params.nbd_arg}                                      \
-            --corr-method         {params.corr_method}              \
+            --dataset               {wildcards.expt}                \
+            --output-dir            {params.output_dir}             \
+            --supplementary-features {input.supplementary}          \
+            --corr-method           {params.corr_method}             \
             --distance-min        {params.distance_min}             \
             --distance-max        {params.distance_max}             \
             --distance-step       {params.distance_step}            \

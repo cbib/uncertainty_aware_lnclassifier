@@ -32,11 +32,6 @@ def _stat_cfg(wc):
     return config["feature_analysis"][wc.expt].get("statistical_analysis", {})
 
 
-def _opt_path(path):
-    """Return [] for null/empty paths so Snakemake does not require missing files."""
-    return [path] if path else []
-
-
 def _opt_arg(flag, path):
     """Build optional CLI args for nullable config paths."""
     return f"{flag} '{path}'" if path else ""
@@ -62,6 +57,7 @@ rule statistical_tests:
         groups_tsv="results/{expt}/features/entropy/{expt}_entropy_groups.tsv",
         cluster_file="results/{expt}/features/clustering/feature_clusters_at_distances.csv",
         optimal_threshold="results/{expt}/features/clustering/optimal_threshold.txt",
+        supplementary="results/{expt}/features/supplementary_features.tsv",
     output:
         high_entropy_pc_v_lnc_mwu="results/{expt}/features/statistical_analysis/high_entropy_pc_v_lnc_mannwhitney.csv",
         high_entropy_pc_v_lnc_chi2="results/{expt}/features/statistical_analysis/high_entropy_pc_v_lnc_chi2.csv",
@@ -77,8 +73,6 @@ rule statistical_tests:
         output_dir="results/{expt}/features/statistical_analysis",
         fdr_method=lambda wc: _stat_cfg(wc).get("fdr_method", "fdr_bh"),
         fdr_alpha=lambda wc: _stat_cfg(wc).get("fdr_alpha", 0.01),
-        te_arg=lambda wc: _opt_arg("--te-features", config["feature_analysis"][wc.expt].get("te_features")),
-        nbd_arg=lambda wc: _opt_arg("--nbd-features", config["feature_analysis"][wc.expt].get("nbd_features")),
         cluster_arg=lambda wc: _opt_arg("--cluster-file", config["feature_analysis"][wc.expt].get("cluster_file")),
         cluster_threshold=lambda wc, input: (
             config["feature_analysis"][wc.expt].get("cluster_threshold")
@@ -91,7 +85,7 @@ rule statistical_tests:
         mem_mb=16000,
         runtime=60,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/statistical_tests.py \
@@ -99,8 +93,7 @@ rule statistical_tests:
             --output-dir          {params.output_dir} \
             --entropy-tsv         {input.entropy_tsv} \
             --groups-tsv          {input.groups_tsv} \
-            {params.te_arg} \
-            {params.nbd_arg} \
+            --supplementary-features {input.supplementary} \
             {params.cluster_arg} \
             --cluster-threshold   {params.cluster_threshold} \
             --fdr-method          {params.fdr_method} \

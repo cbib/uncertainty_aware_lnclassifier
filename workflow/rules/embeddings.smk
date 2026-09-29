@@ -23,16 +23,6 @@ def _embed_cfg(wc):
     return config["feature_analysis"][wc.expt]["embeddings"]
 
 
-def _opt_path(path):
-    """Return [] for null/empty paths so Snakemake treats them as optional."""
-    return [path] if path else []
-
-
-def _opt_arg(flag, path):
-    """Build optional CLI args for nullable config paths."""
-    return f"{flag} '{path}'" if path else ""
-
-
 # ── Rules ─────────────────────────────────────────────────────────────────────
 
 rule compute_embeddings:
@@ -44,18 +34,14 @@ rule compute_embeddings:
     skipped on subsequent runs without --force-rerun.
     """
     input:
-        full_table = "results/{expt}/tables/{expt}_full_table.tsv",
-        binary     = "results/{expt}/tables/{expt}_binary_class_table.tsv",
-        te         = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("te_features")),
-        nbd        = lambda wc: _opt_path(config["feature_analysis"][wc.expt].get("nbd_features")),
+        full_table    = "results/{expt}/tables/{expt}_full_table.tsv",
+        binary        = "results/{expt}/tables/{expt}_binary_class_table.tsv",
+        supplementary = "results/{expt}/features/supplementary_features.tsv",
     output:
         flag = "results/{expt}/features/embeddings/embeddings_complete.flag",
     params:
         output_dir      = "results/{expt}/features/embeddings",
-        te_features     = lambda wc: config["feature_analysis"][wc.expt]["te_features"],
         nbd_features    = lambda wc: config["feature_analysis"][wc.expt]["nbd_features"],
-        te_arg          = lambda wc: _opt_arg("--te-features", config["feature_analysis"][wc.expt].get("te_features")),
-        nbd_arg         = lambda wc: _opt_arg("--nbd-features", config["feature_analysis"][wc.expt].get("nbd_features")),
         methods         = lambda wc: ",".join(_embed_cfg(wc)["methods"].keys()),
         umap_n          = lambda wc: list(_embed_cfg(wc)["methods"]["umap"]["n_neighbors"])[0],
         umap_min_dist   = lambda wc: list(_embed_cfg(wc)["methods"]["umap"]["min_dist"])[0],
@@ -68,15 +54,14 @@ rule compute_embeddings:
         mem_mb   = 32000,
         runtime  = 120,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/compute_embeddings.py \
             --dataset           {wildcards.expt} \
             --results-dir       results \
             --output-dir        {params.output_dir} \
-            {params.te_arg} \
-            {params.nbd_arg} \
+            --supplementary-features {input.supplementary} \
             --methods           {params.methods} \
             --umap-neighbors    {params.umap_n} \
             --umap-min-dist     {params.umap_min_dist} \

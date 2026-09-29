@@ -3,6 +3,9 @@ configfile: "config/feature_analysis_config.yaml"
 configfile: "config/shap_config.yaml"
 configfile: "config/figures_config.yaml"
 
+# ── Module includes ───────────────────────────────────────────────────────────
+include: "feature_analysis.smk"  # already includes statistical_analysis.smk, embeddings.smk, shap.smk
+
 # ── Dataset constants ─────────────────────────────────────────────────────────
 _FIG_NFOLDS = 5
 
@@ -53,7 +56,7 @@ rule performance_figures:
         mem_mb  = 4000,
         runtime = 30,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/plot_performance_figures.py \
@@ -161,7 +164,7 @@ rule entropy_main_figures:
         mem_mb  = 4000,
         runtime = 60,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/plot_entropy_main_figures.py \
@@ -197,7 +200,7 @@ rule upset_figure:
         mem_mb  = 4000,
         runtime = 20,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/plot_upset_figure.py \
@@ -234,7 +237,7 @@ rule tsne_figure:
         mem_mb  = 4000,
         runtime = 60,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/plot_tsne_figure.py \
@@ -291,7 +294,7 @@ rule shap_figures:
         mem_mb  = 4000,
         runtime = 60,
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     shell:
         """
         python -u workflow/scripts/plot_shap_figures.py \
@@ -329,7 +332,7 @@ rule gencode_versions_figure:
     output:
         figure="results/figures/001_gencode_versions.png"
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     notebook:
         "workflow/notebooks/figures/001_gencode_versions.ipynb"
 
@@ -344,7 +347,7 @@ rule generate_timeline:
         png="results/figures/timeline.png",
         html="results/figures/timeline.html"
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     log:
         "logs/generate_timeline.log"
     benchmark:

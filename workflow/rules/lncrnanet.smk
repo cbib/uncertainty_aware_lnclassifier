@@ -106,7 +106,7 @@ rule filter_fasta_for_lncrnanet:
     output:
         "results/{dset}/lncrnanet/transcripts.fa.for_lncrnanet"
     conda:
-        "lnc-datasets"
+        "../envs/lnc-datasets_env.yaml"
     script:
         "../scripts/filter_fasta_for_lncrnanet.py"
 
