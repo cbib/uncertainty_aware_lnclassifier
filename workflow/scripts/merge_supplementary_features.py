@@ -52,7 +52,7 @@ def merge_features(
         return pd.DataFrame(index=clean_index)
 
     merged = pd.concat(
-        [df.reindex(clean_index, fill_value=0) for df in active.values()],
+        [df.reindex(clean_index, fill_value=0).fillna(0) for df in active.values()],
         axis=1,
     )
     merged.index.name = "seq_ID"
